@@ -25,6 +25,10 @@ assumed victories. Stage attempts, shop refreshes, and session duration have
 limits. A changed layout, an unreadable value, an ambiguous purchase, or an
 unconfirmed reward stops the task with a diagnostic screenshot.
 
+The stage list uses enlarged grayscale OCR restricted to its label column.
+This reads both white unselected labels and brown selected labels on gold;
+the selected Story stage 5 was missed by full-screen OCR during live testing.
+
 ## Reward target verified from the reference recording
 
 | Source | Astrite | Required progress |

@@ -12,8 +12,16 @@ def crop(frame, region):
     return frame[round(y * h):round(bottom * h), round(x * w):round(right * w)]
 
 
+def stage_label_frame(frame):
+    # Selected labels are brown on pale gold, unlike the white unselected text.
+    # Keep three channels because the ONNX detector requires an H x W x 3 input.
+    return cv2.cvtColor(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+
+
 def green_check(frame, x, y):
-    hsv = cv2.cvtColor(crop(frame, (x - .015, y - .022, x + .015, y + .022)), cv2.COLOR_BGR2HSV)
+    # Stay close to the circular badge so a one-pixel OCR baseline shift does
+    # not dilute its green fill with the surrounding purple stage card.
+    hsv = cv2.cvtColor(crop(frame, (x - .012, y - .018, x + .012, y + .018)), cv2.COLOR_BGR2HSV)
     return float(np.mean(cv2.inRange(hsv, (35, 60, 110), (90, 255, 255)) > 0)) > .2
 
 

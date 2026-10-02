@@ -1,5 +1,6 @@
 import json
 import re
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +13,7 @@ from src.task.cubie_wars.model import (
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, placement_points, recipe_available,
-    valid_preview, white_check, yellow_button,
+    stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
 
@@ -95,6 +96,47 @@ def make_task():
     task.mouse_up = MagicMock()
     task.send_key = MagicMock()
     return task
+
+
+@pytest.mark.parametrize('case', json.loads((FIXTURES / 'stage_labels_ocr.json').read_text()),
+                         ids=lambda case: case['name'])
+def test_selected_stage_label_uses_focused_ocr_and_preserves_all_checks(case):
+    task = make_task()
+    task.executor.method.width = 1920 if case['count'] == 5 else 1280
+    task.executor.method.height = 1080 if case['count'] == 5 else 720
+    task.executor.frame = frame('live_story_stages' if case['count'] == 5 else 'stages')
+    task.observe = MagicMock(return_value=Screen.STAGES)
+    # Full-screen OCR omitted selected Stage 5. Use actual focused OCR results.
+    task._texts = [Text('Stage 1', .1, .3)]
+    task.ocr = MagicMock(return_value=[SimpleNamespace(
+        name=t['name'], x=t['x']*task.width, y=t['y']*task.height,
+        width=t['width']*task.width, height=t['height']*task.height)
+        for t in case['texts']])
+    checks, rows = task.stage_checks(case['count'])
+    assert set(rows) == set(range(1, case['count'] + 1))
+    assert all(checks.values())
+    for row in rows.values():
+        for offset in (-2, 0, 2):
+            assert green_check(task.frame, .149, row.center[1] + offset / task.height)
+    without_tick = task.frame.copy()
+    selected_y = rows[case['count']].center[1]
+    x, y = round(.149 * task.width), round(selected_y * task.height)
+    without_tick[y-25:y+25, x-25:x+25] = (95, 60, 80)
+    assert not green_check(without_tick, .149, selected_y)
+    assert task.ocr.call_args.kwargs['frame_processor'] is stage_label_frame
+    assert task.ocr.call_args.kwargs['target_height'] == 2160
+    processed = stage_label_frame(task.frame)
+    assert processed.shape == task.frame.shape
+    assert (processed[:, :, 0] == processed[:, :, 2]).all()
+
+
+def test_missing_stage_still_stops_instead_of_assuming_completion():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.STAGES)
+    task.ocr = MagicMock(return_value=[])
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='every Cubie Wars stage'):
+        task.stage_checks(5)
 
 
 def test_failed_drag_returns_to_source_rotates_with_r_and_releases():

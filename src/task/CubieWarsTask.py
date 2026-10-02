@@ -11,7 +11,7 @@ from src.task.cubie_wars.model import (
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, placement_points, recipe_available,
-    valid_preview, white_check, yellow_button,
+    stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
 
@@ -140,8 +140,14 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def stage_checks(self, count):
         if self.observe() != Screen.STAGES:
             self.stop_with_evidence("Expected the Cubie Wars stage list")
+        # Full-screen OCR misses the dark selected label on its gold background.
+        # Restrict detection to the text column, excluding portraits and ticks.
+        labels = self.ocr(.085, .2, .14, .9, frame=self.frame, threshold=.65,
+                          target_height=2160, frame_processor=stage_label_frame)
         rows = {}
-        for t in self._texts:
+        for label in labels:
+            t = Text(label.name, label.x / self.width, label.y / self.height,
+                     label.width / self.width, label.height / self.height)
             match = re.fullmatch(r"Stage\s*([1-6])", t.name.strip(), re.I)
             if match and t.center[0] < .18:
                 rows[int(match[1])] = t
