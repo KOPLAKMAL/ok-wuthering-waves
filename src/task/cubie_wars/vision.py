@@ -18,6 +18,36 @@ def stage_label_frame(frame):
     return cv2.cvtColor(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
 
 
+def spotlight_target(frame, anchor):
+    """Find the bright rounded yellow tutorial border near its known control."""
+    h, w = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, (15, 80, 160), (40, 255, 255))
+    candidates = []
+    for contour in cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]:
+        x, y, width, height = cv2.boundingRect(contour)
+        if not (.035*w < width < .65*w and .025*h < height < .8*h):
+            continue
+        center = ((x + width/2)/w, (y + height/2)/h)
+        if abs(center[0]-anchor[0]) > .06 or abs(center[1]-anchor[1]) > .07:
+            continue
+        if not (x < anchor[0]*w < x+width and y < anchor[1]*h < y+height):
+            continue
+        tile = mask[y:y+height, x:x+width] > 0
+        bx, by = max(2, round(width*.12)), max(2, round(height*.12))
+        # A tutorial frame has continuous yellow on all four edges. Coins,
+        # swords, and decorative gold inside a control do not meet this check.
+        edges = (tile[:by, bx:-bx].any(axis=0).mean(),
+                 tile[-by:, bx:-bx].any(axis=0).mean(),
+                 tile[by:-by, :bx].any(axis=1).mean(),
+                 tile[by:-by, -bx:].any(axis=1).mean())
+        if min(edges) > .7:
+            # The speed highlight also encloses Pause. Click the observed
+            # control inside the verified border, not the rectangle's center.
+            candidates.append((width*height, anchor))
+    return max(candidates, default=(0, None))[1]
+
+
 def green_check(frame, x, y):
     # Stay close to the circular badge so a one-pixel OCR baseline shift does
     # not dilute its green fill with the surrounding purple stage card.

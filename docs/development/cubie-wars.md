@@ -27,12 +27,19 @@ The first Store phase waits for its round splash and observes again before
 shopping. A delayed tutorial returns control to the tutorial handler. Unreadable
 resources are retried a bounded number of times; they never default to zero.
 
+The recorded tutorial highlights for coins, Start, and combat speed are handled
+before normal Store or combat actions. Each click requires both the instruction
+text and a yellow border around the expected control. The speed click targets
+the speed control inside the shared border with Pause. A missing border or three
+clicks without advancing stops with a screenshot. Other tutorial instructions
+still need observation and live validation.
+
 The task reads the stage list again after each attempt; it does not persist
 assumed victories. Stage attempts, shop refreshes, and session duration have
 limits. A changed layout, an unreadable value, an ambiguous purchase, or an
 unconfirmed reward stops the task with a diagnostic screenshot.
 
-The stage list uses enlarged grayscale OCR restricted to its label column.
+The stage list uses grayscale OCR restricted to its label column.
 This reads both white unselected labels and brown selected labels on gold;
 the selected Story stage 5 was missed by full-screen OCR during live testing.
 

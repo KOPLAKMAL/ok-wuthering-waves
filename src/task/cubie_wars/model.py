@@ -16,6 +16,7 @@ class Screen(Enum):
     CUBE = "Cube selection"
     DETAILS = "Stage details"
     GUIDE = "Tutorial"
+    SPOTLIGHT = "Tutorial highlight"
     SHOP = "Round store"
     MATCHING = "Matchmaking"
     COMBAT = "Combat"
@@ -58,6 +59,8 @@ def classify(texts):
         return Screen.PURCHASE
     if has(r"Turn to the last page|Items must be placed entirely|Items placed in the Storybook"):
         return Screen.GUIDE
+    if spotlight_instruction(texts):
+        return Screen.SPOTLIGHT
     if has(r"Adventure Goals", (0, 0, .4, .15)):
         return Screen.GOALS
     if has(r"Backstage Store", (0, 0, .5, .2)) and has(r"Inventory|SOLD OUT|Astrite", (0, .18, 1, .85)):
@@ -89,6 +92,18 @@ def classify(texts):
     if has(r"Story Mode", (.2, .55, .5, .8)) and has(r"Adventure Mode", (.5, .55, .82, .8)):
         return Screen.HUB
     return Screen.UNKNOWN
+
+
+def spotlight_instruction(texts):
+    """Only tutorial instructions observed in the supplied recording."""
+    prompts = (
+        (r"Use\s*Coins\s*to\s*purchase\s*Items", (.937, .144)),
+        (r"Manage\s*your\s*set\s*and\s*click\s*the\s*bottom\s*right", (.895, .84)),
+        (r"Use\s*the\s*Speed\s*Button\s*to\s*adjust\s*the\s*combat\s*s?peed", (.933, .177)),
+    )
+    text = joined(texts)
+    return next(((pattern, anchor) for pattern, anchor in prompts
+                 if re.search(pattern, text, re.I)), None)
 
 
 STORY_COUNT = 5

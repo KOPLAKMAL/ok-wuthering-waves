@@ -10,10 +10,11 @@ import pytest
 from src.task.CubieWarsTask import CubieWarsTask, ShopInterrupted
 from src.task.cubie_wars.model import (
     ADVENTURE_COUNT, ASTRITE_TOTAL, Screen, Text, classify, next_stage, parse_item,
+    spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, placement_points, recipe_available,
-    stage_label_frame, valid_preview, white_check, yellow_button,
+    spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
 
@@ -188,9 +189,10 @@ def test_windows_run_without_admin_stops_before_sending_input():
     task.send_key.assert_not_called()
 
 
-def test_delayed_tutorial_prevents_shop_actions():
+@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SPOTLIGHT])
+def test_delayed_tutorial_prevents_shop_actions(screen):
     task = make_task()
-    task.observe = MagicMock(return_value=Screen.GUIDE)
+    task.observe = MagicMock(return_value=screen)
     task.synthesize = MagicMock()
     task.coins = MagicMock()
     assert task.prepare_round() is False
@@ -207,10 +209,11 @@ def test_resource_ocr_retries_an_initial_animation_frame():
     assert task.ocr.call_count == 2
 
 
-def test_resource_ocr_defers_to_a_new_tutorial():
+@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SPOTLIGHT])
+def test_resource_ocr_defers_to_a_new_tutorial(screen):
     task = make_task()
     task.ocr = MagicMock(return_value=[])
-    task.observe = MagicMock(return_value=Screen.GUIDE)
+    task.observe = MagicMock(return_value=screen)
     with pytest.raises(ShopInterrupted):
         task.coins()
     assert task.ocr.call_count == 1
@@ -242,3 +245,59 @@ def test_resume_story_rejoins_stage_verification_and_rewards():
     task.play_stage.assert_called_once_with('Story')
     assert [call.args for call in task.complete_mode.call_args_list] == [('Story',), ('Adventure',)]
     task.claim_rewards.assert_called_once()
+
+
+@pytest.mark.parametrize('name,anchor', [
+    ('spotlight_coins', (.937, .144)),
+    ('spotlight_start', (.895, .84)),
+    ('spotlight_speed', (.933, .177)),
+])
+def test_recorded_highlight_requires_border_and_clicks_the_control(name, anchor):
+    task = make_task()
+    task.executor.frame = frame(name)
+    task._texts = [Text(**t) for t in next(c['texts'] for c in CASES if c['name'] == name)]
+    task.click_relative = MagicMock()
+    assert spotlight_instruction(task._texts)[1] == anchor
+    assert spotlight_target(task.frame, anchor) == anchor
+    task.handle_spotlight()
+    task.click_relative.assert_called_once_with(*anchor, after_sleep=.7)
+    # Ordinary shop gold and sword decorations cannot substitute for a border.
+    assert spotlight_target(frame('shop'), anchor) is None
+
+
+def test_highlight_missing_border_stops_before_input():
+    task = make_task()
+    task.executor.frame = frame('shop')
+    task._texts = [Text('Use Coins to purchase Items', .7, .2)]
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='yellow border'):
+        task.handle_spotlight()
+    task.click_relative.assert_not_called()
+
+
+def test_highlight_that_does_not_advance_has_a_click_limit():
+    task = make_task()
+    task.executor.frame = frame('spotlight_coins')
+    task._texts = [Text('Use Coins to purchase Items', .7, .2)]
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    for _ in range(3):
+        task.handle_spotlight()
+    with pytest.raises(RuntimeError, match='three highlighted clicks'):
+        task.handle_spotlight()
+    assert task.click_relative.call_count == 3
+
+
+def test_start_highlight_arriving_after_preparation_returns_to_tutorial():
+    task = make_task()
+    task._texts = [Text('Round 1 - Store', .6, .1)]
+    task.observe = MagicMock(side_effect=[Screen.SHOP, Screen.SPOTLIGHT,
+                                         Screen.SPOTLIGHT, Screen.STAGE_RESULT])
+    task.prepare_round = MagicMock(return_value=True)
+    task.handle_spotlight = MagicMock()
+    task.click_text = MagicMock()
+    task.play_stage('Story')
+    task.handle_spotlight.assert_called_once()
+    # The tutorial handler owns Start while the overlay is present.
+    assert all(call.args[0] != r'^Start$' for call in task.click_text.call_args_list)

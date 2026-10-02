@@ -7,11 +7,11 @@ from src.task.BaseWWTask import BaseWWTask
 from src.task.WWOneTimeTask import WWOneTimeTask
 from src.task.cubie_wars.model import (
     ADVENTURE_COUNT, CUBES, MILESTONES, STORY_COUNT, STORE_OFFERS,
-    Screen, Text, classify, joined, next_stage, parse_item,
+    Screen, Text, classify, joined, next_stage, parse_item, spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, placement_points, recipe_available,
-    stage_label_frame, valid_preview, white_check, yellow_button,
+    spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
 
@@ -47,6 +47,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._texts = []
         self._role = "Adventurer"
         self._deadline = 0
+        self._spotlight_attempts = {}
 
     def validate_config(self, key, value):
         limits = {"Stage attempts": (1, 10), "Refreshes per round": (0, 20), "Session minutes": (1, 360)}
@@ -57,6 +58,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def run(self):
         # Inspection is deliberately input-free, including the usual mouse reset.
         self._deadline = time.monotonic() + self.config.get("Session minutes", 180) * 60
+        self._spotlight_attempts = {}
         screen = self.observe()
         if self.config.get("Mode") == "Inspect screen":
             self.screenshot("cubie-wars-inspection")
@@ -66,7 +68,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
         resume_story = self.config.get("Mode") == "Resume Story stage"
         if resume_story:
-            if screen not in {Screen.GUIDE, Screen.DETAILS, Screen.SHOP, Screen.MATCHING,
+            if screen not in {Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.MATCHING,
                               Screen.COMBAT, Screen.ROUND_RESULT, Screen.STAGE_RESULT, Screen.EVENT}:
                 self.stop_with_evidence("Open the active Story stage before choosing Resume Story stage")
         elif screen != Screen.HUB:
@@ -177,7 +179,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 unknown_since = time.monotonic()
             elif time.monotonic() - unknown_since > 45:
                 self.stop_with_evidence("Unrecognized Cubie Wars screen during a stage")
-            if screen == Screen.GUIDE:
+            if screen == Screen.SPOTLIGHT:
+                self.handle_spotlight()
+            elif screen == Screen.GUIDE:
                 if self.text(r"^Confirm$", (.3, .8, .7, 1)):
                     self.click_text(r"^Confirm$", (.3, .8, .7, 1))
                 else:
@@ -205,8 +209,10 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                         continue
                 except ShopInterrupted:
                     continue  # Re-enter the tutorial branch on the next observation.
-                self.observe()
-                if classify(self._texts) != Screen.SHOP:
+                prepared_screen = self.observe()
+                if prepared_screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
+                    continue
+                if prepared_screen != Screen.SHOP:
                     self.stop_with_evidence("Shop layout changed during preparation")
                 self.click_text(r"^Start$", (.8, .8, 1, .95))
                 last_shop = round_text
@@ -236,7 +242,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             match = re.search(pattern, text)
             if match:
                 return (int(match[1]), int(match[2])) if fraction else int(match[0])
-            if self.observe() == Screen.GUIDE:
+            if self.observe() in {Screen.GUIDE, Screen.SPOTLIGHT}:
                 raise ShopInterrupted()
             if attempt < 3:
                 self.sleep(.35)
@@ -317,6 +323,21 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 if self.coins() >= before:
                     self.stop_with_evidence("Shop refresh did not consume a coin")
         return True
+
+    def handle_spotlight(self):
+        instruction = spotlight_instruction(self._texts)
+        if not instruction:
+            self.stop_with_evidence("Cubie Wars tutorial instruction was not recognized")
+        pattern, anchor = instruction
+        target = spotlight_target(self.frame, anchor)
+        if target is None:
+            self.stop_with_evidence("Cubie Wars tutorial yellow border was not recognized")
+        attempts = self._spotlight_attempts.get(pattern, 0)
+        if attempts >= 3:
+            self.stop_with_evidence("Cubie Wars tutorial did not advance after three highlighted clicks")
+        self._spotlight_attempts[pattern] = attempts + 1
+        self.log_info(f"Cubie Wars: clicking tutorial highlight at {target}")
+        self.click_relative(*target, after_sleep=.7)
 
     def drag_to_book(self, source, baseline, sheet=False):
         points = placement_points(baseline, sheet)
