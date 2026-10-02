@@ -26,13 +26,20 @@ input-free inspection still works without elevation.
 The first Store phase waits for its round splash and observes again before
 shopping. A delayed tutorial returns control to the tutorial handler. Unreadable
 resources are retried a bounded number of times; they never default to zero.
+If a small crop misses a number, the task accepts a single complete numeric
+label from full-screen OCR inside the same resource region. Tutorials take
+precedence over this fallback.
 
-The recorded tutorial highlights for coins, Start, and combat speed are handled
+The recorded tutorial highlights for coins, the shop item, the destination
+Sheet, Start, and combat speed are handled
 before normal Store or combat actions. Each click requires both the instruction
 text and a yellow border around the expected control. The speed click targets
 the speed control inside the shared border with Pause. A missing border or three
 clicks without advancing stops with a screenshot. Other tutorial instructions
 still need observation and live validation.
+The two drag instructions are introductory click-through overlays in the
+recording: the highlighted shop item and then the Sheet are clicked before
+normal purchasing begins. They do not initiate a purchase themselves.
 
 The task reads the stage list again after each attempt; it does not persist
 assumed victories. Stage attempts, shop refreshes, and session duration have

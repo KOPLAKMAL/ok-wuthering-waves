@@ -249,6 +249,8 @@ def test_resume_story_rejoins_stage_verification_and_rewards():
 
 @pytest.mark.parametrize('name,anchor', [
     ('spotlight_coins', (.937, .144)),
+    ('spotlight_item', (.636, .278)),
+    ('spotlight_sheet', (.348, .37)),
     ('spotlight_start', (.895, .84)),
     ('spotlight_speed', (.933, .177)),
 ])
@@ -301,3 +303,38 @@ def test_start_highlight_arriving_after_preparation_returns_to_tutorial():
     task.handle_spotlight.assert_called_once()
     # The tutorial handler owns Start while the overlay is present.
     assert all(call.args[0] != r'^Start$' for call in task.click_text.call_args_list)
+
+
+def test_resource_fallback_uses_recorded_full_screen_numbers():
+    task = make_task()
+    task._texts = [Text(**t) for t in next(c['texts'] for c in CASES if c['name'] == 'shop')]
+    task.ocr = MagicMock(return_value=[])
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    assert task.coins() == 6
+    assert task.number((.139, .103, .178, .139), fraction=True) == (3, 6)
+
+
+@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SPOTLIGHT])
+def test_tutorial_precedes_readable_full_screen_number_fallback(screen):
+    task = make_task()
+    task._texts = [Text('6', .94, .13, .01, .02)]
+    task.ocr = MagicMock(return_value=[])
+    task.observe = MagicMock(return_value=screen)
+    with pytest.raises(ShopInterrupted):
+        task.coins()
+
+
+@pytest.mark.parametrize('texts', [
+    [Text('6', .5, .5)],  # A number elsewhere in the screen is not a resource.
+    [Text('6', .94, .13), Text('9', .95, .14)],  # Ambiguous detections.
+    [Text('Round 6', .94, .13)],  # Numeric substring in a label.
+])
+def test_resource_fallback_rejects_unrelated_or_ambiguous_numbers(texts):
+    task = make_task()
+    task._texts = texts
+    task.ocr = MagicMock(return_value=[])
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='resource value is unreadable'):
+        task.coins()
+    assert task.ocr.call_count == 4

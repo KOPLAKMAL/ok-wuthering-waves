@@ -98,6 +98,8 @@ def spotlight_instruction(texts):
     """Only tutorial instructions observed in the supplied recording."""
     prompts = (
         (r"Use\s*Coins\s*to\s*purchase\s*Items", (.937, .144)),
+        (r"Drag\s*Items\s*into\s*the\s*Sheet\s*to\s*purchase", (.636, .278)),
+        (r"Drag\s*the\s*Items\s*you\s*want\s*into\s*the\s*Sheet", (.348, .37)),
         (r"Manage\s*your\s*set\s*and\s*click\s*the\s*bottom\s*right", (.895, .84)),
         (r"Use\s*the\s*Speed\s*Button\s*to\s*adjust\s*the\s*combat\s*s?peed", (.933, .177)),
     )

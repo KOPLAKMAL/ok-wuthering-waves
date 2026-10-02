@@ -244,6 +244,16 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 return (int(match[1]), int(match[2])) if fraction else int(match[0])
             if self.observe() in {Screen.GUIDE, Screen.SPOTLIGHT}:
                 raise ShopInterrupted()
+            # Small crops sometimes fail to detect a single digit although
+            # full-screen OCR can read it. Keep the same positional constraint
+            # and require a complete numeric label before using that fallback.
+            x, y, right, bottom = region
+            values = [re.fullmatch(pattern, t.name.strip()) for t in self._texts
+                      if x <= t.center[0] <= right and y <= t.center[1] <= bottom]
+            values = [value for value in values if value]
+            if len(values) == 1:
+                match = values[0]
+                return (int(match[1]), int(match[2])) if fraction else int(match[0])
             if attempt < 3:
                 self.sleep(.35)
         self.stop_with_evidence(f"Cubie Wars resource value is unreadable: {region}")
