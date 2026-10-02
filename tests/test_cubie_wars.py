@@ -448,6 +448,35 @@ def test_native_recommendation_is_attempted_with_last_coin_before_refresh():
     task.click_relative.assert_not_called()
 
 
+def test_tooltip_can_appear_after_first_hover_frame():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    case = next(c for c in json.loads((FIXTURES / 'item_categories_ocr.json').read_text())
+                if c['category'] == 'Relic')
+    boxes = [SimpleNamespace(name=t['name'], x=t['x']*task.width, y=t['y']*task.height,
+                             width=t['width']*task.width, height=t['height']*task.height)
+             for t in case['texts']]
+    task.ocr = MagicMock(side_effect=[[], boxes])
+    assert task.shop_item(1).category == 'Relic'
+    assert task.ocr.call_count == 2
+    task.move_relative.assert_called_once_with(*task.SHOP_SLOTS[1])
+
+
+def test_live_middle_thumb_is_detected_even_without_item_tooltip():
+    image = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
+    assert [recommended_item(image, (x, .392 if index < 3 else .64))
+            for index, (x, _) in enumerate(CubieWarsTask.SHOP_SLOTS)] == [False, True, False, False, False]
+
+
+def test_tutorial_during_hover_interrupts_before_purchase():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.SPOTLIGHT)
+    task.ocr = MagicMock(return_value=[])
+    with pytest.raises(ShopInterrupted):
+        task.shop_item(1)
+    task.mouse_down.assert_not_called()
+
+
 def test_shop_waits_for_recommendations_after_animation_before_refresh():
     task = make_task()
     empty = frame('live_shop')

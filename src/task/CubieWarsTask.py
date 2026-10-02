@@ -5,6 +5,7 @@ from ok.util.process import is_admin
 
 from src.task.BaseWWTask import BaseWWTask
 from src.task.WWOneTimeTask import WWOneTimeTask
+from src.task.cubie_wars.interaction import cubie_cursor
 from src.task.cubie_wars.model import (
     ADVENTURE_COUNT, CUBES, MILESTONES, STORY_COUNT, STORE_OFFERS,
     Screen, Text, classify, joined, next_stage, parse_item, spotlight_instruction,
@@ -78,15 +79,16 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Open the Cubie Wars Story Mode / Adventure Mode menu before starting")
         if not self.is_browser() and not is_admin():
             self.stop_with_evidence("Restart OK-WW as Administrator using Start Cubie Wars.cmd, then approve Windows UAC")
-        WWOneTimeTask.run(self)
-        if resume_story:
-            self.play_stage("Story")
-            self.wait_screen({Screen.STAGES})
-            self.close_page()
-        if resume_story or self.config.get("Mode") == "Astrite run":
-            for mode in ("Story", "Adventure"):
-                self.complete_mode(mode)
-        self.claim_rewards()
+        with cubie_cursor(self.executor):
+            WWOneTimeTask.run(self)
+            if resume_story:
+                self.play_stage("Story")
+                self.wait_screen({Screen.STAGES})
+                self.close_page()
+            if resume_story or self.config.get("Mode") == "Astrite run":
+                for mode in ("Story", "Adventure"):
+                    self.complete_mode(mode)
+            self.claim_rewards()
 
     def observe(self):
         if self._deadline and time.monotonic() > self._deadline:
@@ -327,6 +329,21 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def coins(self):
         return self.number((.934, .121, .966, .162))
 
+    def shop_item(self, index):
+        self.move_relative(*self.SHOP_SLOTS[index])
+        for attempt in range(4):
+            self.sleep(.4)
+            self.next_frame()
+            boxes = self.ocr(.2, .075, .68, .7, threshold=.7)
+            tooltip = [Text(b.name, b.x / self.width, b.y / self.height,
+                            b.width / self.width, b.height / self.height) for b in boxes]
+            item = parse_item(tooltip)
+            if item and item.category:
+                return item
+            self.require_shop()
+        self.stop_with_evidence(f"Recommended slot {index + 1} tooltip is unreadable; "
+                                "stopped before spending coins on refresh")
+
     def prepare_round(self):
         # The first-time tutorial opens after the initial round splash. Observe
         # again after it settles, before reading resources or touching items.
@@ -351,9 +368,6 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 for index, (x, y) in enumerate(self.SHOP_SLOTS):
                     if index in skipped or not recommended[index]:
                         continue
-                    self.move_relative(x, y)
-                    self.sleep(.4)
-                    self.next_frame()
                     price_y = .392 if index < 3 else .64
                     price_boxes = self.ocr(x - .015, price_y - .021, x + .007, price_y + .02,
                                            threshold=.65, frame_processor=number_frame)
@@ -365,18 +379,15 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     price = int(price_match[1])
                     if not 0 < price <= coins:
                         continue
-                    tooltip_boxes = self.ocr(.2, .075, .68, .7, threshold=.7)
-                    tooltip = [Text(b.name, b.x / self.width, b.y / self.height,
-                                    b.width / self.width, b.height / self.height) for b in tooltip_boxes]
-                    item = parse_item(tooltip)
-                    if not item or not item.category:
-                        self.stop_with_evidence(f"Recommended slot {index + 1} tooltip is unreadable; "
-                                                "stopped before spending coins on refresh")
+                    item = self.shop_item(index)
                     rank = item.purchase_rank(self._role, maximum - used, free, price)
                     self.log_info(f"Cubie Wars: slot {index + 1} {item.name} ({item.category}), "
                                   f"price {price}, eligible {rank is not None}")
                     if rank is not None:
                         offers.append((rank, index, item))
+                    self.move_relative(.55, .78)
+                    self.sleep(.25)
+                    self.next_frame()
                 if not offers:
                     break
                 _, index, item = max(offers, key=lambda offer: offer[0])

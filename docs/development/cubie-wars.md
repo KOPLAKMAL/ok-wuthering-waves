@@ -23,6 +23,12 @@ yourself. Live input is blocked with an actionable error when OK-WW has no
 administrator privileges. This prevents silent clicks against an elevated game;
 input-free inspection still works without elevation.
 
+During active Cubie Wars runs with the native PostMessage backend, a temporary
+adapter brings the game to the foreground and moves the real cursor through
+the framework's PyDirect cursor method. Keep the mouse free while it runs.
+The usual PostMessage backend is restored on completion, error, or Stop.
+Inspection does not install this adapter or move the cursor.
+
 The first Store phase waits for its round splash and observes again before
 shopping. A delayed tutorial returns control to the tutorial handler. Unreadable
 resources are retried a bounded number of times; they never default to zero.
@@ -101,6 +107,13 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
 - Test candidate positions in all four orientations. Release only after a
   green placement preview with no red collision cells. On failure or Stop,
   return to the source and release the mouse.
+- The 05:23 native capture detected the middle offer's thumb, but contained no
+  tooltip after a message-only hover. The temporary adapter moves the actual
+  Windows cursor, preserves MK_LBUTTON on drag motion, and releases at the
+  last target rather than the framework's unchanged (0, 0) position. Read each
+  offer's price before hovering and retry tooltip OCR for four fresh frames;
+  tutorial interruptions return control to their handler. Live purchase and
+  drag still need validation with this adapter.
 - Try available yellow Synthesize buttons, bounded shop refreshes, and 2x
   combat speed. Adventure currently selects Lynae; Story uses its fixed Cubie.
 
