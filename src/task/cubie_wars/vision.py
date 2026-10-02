@@ -34,6 +34,15 @@ def _thumb_template():
     return template
 
 
+@lru_cache(maxsize=1)
+def _native_thumb_template():
+    path = Path(__file__).resolve().parents[3] / 'assets' / 'cubie_wars' / 'recommended_thumb_native.png'
+    template = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if template is None:
+        raise RuntimeError('Missing Cubie Wars native recommended-thumb asset')
+    return template
+
+
 def recommended_item(frame, point):
     x, y = point
     # Each recommendation thumb sits above the price badge's right edge.
@@ -47,12 +56,27 @@ def recommended_item(frame, point):
         gold = cv2.inRange(hsv, (15, saturation, 150), (40, 255, 255))
         gold = cv2.resize(gold, (65, 54), interpolation=cv2.INTER_NEAREST)
         gold = cv2.morphologyEx(gold, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-        for scale in (.65, .7, .75, .8, .85, .9, .95, 1, 1.05, 1.1, 1.15):
-            template = cv2.resize(_thumb_template(), None, fx=scale, fy=scale,
-                                  interpolation=cv2.INTER_NEAREST)
-            if cv2.minMaxLoc(cv2.matchTemplate(gold, template, cv2.TM_CCOEFF_NORMED))[1] > .78:
-                return True
+        for reference in (_thumb_template(), _native_thumb_template()):
+            for scale in (.65, .7, .75, .8, .85, .9, .95, 1, 1.05, 1.1, 1.15):
+                template = cv2.resize(reference, None, fx=scale, fy=scale,
+                                      interpolation=cv2.INTER_NEAREST)
+                if cv2.minMaxLoc(cv2.matchTemplate(gold, template, cv2.TM_CCOEFF_NORMED))[1] > .78:
+                    return True
     return False
+
+
+def possible_recommendation(frame, point):
+    """Recognize an unresolved gold mark so it cannot cause blind rerolls."""
+    x, y = point
+    tile = crop(frame, (x+.023, y-.070, x+.057, y-.020))
+    mask = cv2.inRange(cv2.cvtColor(tile, cv2.COLOR_BGR2HSV), (15, 65, 150), (40, 255, 255))
+    mask = cv2.resize(mask, (65, 54), interpolation=cv2.INTER_NEAREST)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    _, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+    return any(1 < left and 1 < top and left+width < 64 and top+height < 50
+               and 12 <= width <= 40 and 14 <= height <= 40
+               and area/(width*height) > .4
+               for left, top, width, height, area in stats[1:])
 
 
 def spotlight_target(frame, anchor):

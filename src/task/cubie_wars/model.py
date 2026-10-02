@@ -65,7 +65,8 @@ def classify(texts):
         return Screen.GOALS
     if has(r"Backstage Store", (0, 0, .5, .2)) and has(r"Inventory|SOLD OUT|Astrite", (0, .18, 1, .85)):
         return Screen.STORE
-    if has(r"Click anywhere to continue", (.2, .7, .85, 1)) and has(r"Current Victories|Retries Available"):
+    if has(r"Click anywhere to continue", (.2, .7, .85, 1)) and has(
+            r"Current Victories|Retries Available|Win\s*duels\s*to\s*earn\s*Trophies"):
         return Screen.ROUND_RESULT
     if has(r"Rounds Won|Remaining Retries", (.6, .25, 1, .6)) and has(r"^Back$|Next Stage|Try Again|Retry", (.5, .8, 1, 1)):
         return Screen.STAGE_RESULT
@@ -98,6 +99,8 @@ def spotlight_instruction(texts):
     """Only tutorial instructions observed in the supplied recording."""
     prompts = (
         (r"Use\s*Coins\s*to\s*purchase\s*Items", (.937, .144)),
+        (r"(?:set\s*amount\s*of\s*Coins\s*after\s*each\s*round|"
+         r"unused\s*Coins\s*will\s*be\s*carried\s*over)", (.937, .144)),
         (r"Drag\s*Items\s*into\s*the\s*Sheet\s*to\s*purchase", (.636, .278)),
         (r"Drag\s*the\s*Items\s*you\s*want\s*into\s*the\s*Sheet", (.348, .37)),
         (r"Manage\s*your\s*set\s*and\s*click\s*the\s*bottom\s*right", (.895, .84)),

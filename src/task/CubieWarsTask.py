@@ -10,7 +10,8 @@ from src.task.cubie_wars.model import (
     Screen, Text, classify, joined, next_stage, parse_item, spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
-    capacity_tag, green_check, number_frame, placement_points, recipe_available, recommended_item,
+    capacity_tag, crop, green_check, number_frame, placement_points, possible_recommendation,
+    recipe_available, recommended_item,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -48,6 +49,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._role = "Adventurer"
         self._deadline = 0
         self._spotlight_attempts = {}
+        self._shop_scans_saved = 0
 
     def validate_config(self, key, value):
         limits = {"Stage attempts": (1, 10), "Refreshes per round": (0, 20), "Session minutes": (1, 360)}
@@ -59,6 +61,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         # Inspection is deliberately input-free, including the usual mouse reset.
         self._deadline = time.monotonic() + self.config.get("Session minutes", 180) * 60
         self._spotlight_attempts = {}
+        self._shop_scans_saved = 0
         screen = self.observe()
         if self.config.get("Mode") == "Inspect screen":
             self.screenshot("cubie-wars-inspection")
@@ -217,8 +220,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.start_round()
                 last_shop = round_text
             elif screen == Screen.COMBAT:
-                if self.text(r"1[.,]0\s*[Xx]", (.85, .12, .98, .22)):
-                    self.click_relative(.933, .177, after_sleep=.5)
+                self.ensure_combat_speed()
                 self.sleep(1)
             elif screen == Screen.MATCHING:
                 self.sleep(1)
@@ -270,6 +272,58 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.click_relative(.895, .85, after_sleep=.6)
         self.wait_screen({Screen.MATCHING, Screen.COMBAT, Screen.SPOTLIGHT, Screen.GUIDE})
 
+    def ensure_combat_speed(self):
+        for attempt in range(4):
+            speed = self.text(r"[12](?:[.,][05])?\s*[Xx]", (.85, .12, .98, .22))
+            match = re.search(r"([12](?:[.,][05])?)\s*[Xx]", speed.name) if speed else None
+            if not match:
+                # Never click an unreadable speed control: it cycles back to 1x.
+                return
+            value = float(match[1].replace(',', '.'))
+            if value == 2:
+                return
+            if value not in {1, 1.5}:
+                self.stop_with_evidence("Cubie Wars combat speed is not recognized")
+            if attempt == 3:
+                self.stop_with_evidence("Cubie Wars combat speed did not reach 2x after three clicks")
+            self.log_info(f"Cubie Wars: changing combat speed from {value}x toward 2x")
+            self.click_relative(.933, .177, after_sleep=.6)
+            if self.observe() != Screen.COMBAT:
+                return
+
+    def require_shop(self):
+        screen = self.observe()
+        if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
+            raise ShopInterrupted()
+        if screen != Screen.SHOP:
+            self.stop_with_evidence("Cubie Wars Store changed before a shop action")
+
+    def scan_recommendations(self):
+        # Recommendations can appear after the refreshed item animation.
+        # Require a fresh screen observation before treating an empty scan as
+        # permission to spend on refresh, including late tutorial overlays.
+        recommended = []
+        for attempt in range(3):
+            self.require_shop()
+            recommended = [recommended_item(self.frame, (x, .392 if index < 3 else .64))
+                           for index, (x, _) in enumerate(self.SHOP_SLOTS)]
+            if any(recommended):
+                break
+            if attempt < 2:
+                self.sleep(.6)
+        # Save exactly the scanned offers, not a later failure frame. This
+        # compact crop excludes account identifiers and records missed hands.
+        if self._shop_scans_saved < 20:
+            self.screenshot("cubie-wars-shop-offers", frame=crop(self.frame, (.565, .095, .975, .715)).copy())
+            self._shop_scans_saved += 1
+        unresolved = [index+1 for index, (x, _) in enumerate(self.SHOP_SLOTS)
+                      if not recommended[index] and possible_recommendation(
+                          self.frame, (x, .392 if index < 3 else .64))]
+        if unresolved:
+            self.stop_with_evidence(f"Unrecognized gold recommendation marks in slots {unresolved}; "
+                                    "stopped before refresh")
+        return recommended
+
     def coins(self):
         return self.number((.934, .121, .966, .162))
 
@@ -290,8 +344,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 used, maximum = self.number((.139, .103, .178, .139), fraction=True)
                 free = len(placement_points(self.frame))
                 offers = []
-                recommended = [recommended_item(self.frame, (x, .392 if index < 3 else .64))
-                               for index, (x, _) in enumerate(self.SHOP_SLOTS)]
+                recommended = self.scan_recommendations()
                 self.log_info(f"Cubie Wars: recommended shop slots "
                               f"{[index + 1 for index, marked in enumerate(recommended) if marked]}, "
                               f"coins {coins}, capacity {used}/{maximum}")
@@ -331,8 +384,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.move_relative(.55, .78)
                 self.sleep(.25)
                 self.next_frame()
-                baseline = self.frame.copy()
                 before = self.coins()
+                self.require_shop()
+                baseline = self.frame.copy()
                 placed = self.drag_to_book(self.SHOP_SLOTS[index], baseline, item.sheet)
                 self.sleep(.4)
                 self.next_frame()
@@ -354,8 +408,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     self.stop_with_evidence('Cubie Wars shop refresh price is invalid')
                 if before < refresh_price:
                     break
-                self.click_relative(.895, .574, after_sleep=.5)
-                self.next_frame()
+                self.require_shop()
+                self.click_relative(.895, .574, after_sleep=1.5)
+                self.require_shop()
                 if self.coins() != before - refresh_price:
                     self.stop_with_evidence("Shop refresh coin change did not match its price")
         return True

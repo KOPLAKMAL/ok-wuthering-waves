@@ -13,7 +13,8 @@ from src.task.cubie_wars.model import (
     spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
-    capacity_tag, green_check, number_frame, placement_points, recipe_available, recommended_item,
+    capacity_tag, green_check, number_frame, placement_points, possible_recommendation,
+    recipe_available, recommended_item,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -250,6 +251,7 @@ def test_resume_story_rejoins_stage_verification_and_rewards():
 
 @pytest.mark.parametrize('name,anchor', [
     ('spotlight_coins', (.937, .144)),
+    ('spotlight_round_coins', (.937, .144)),
     ('spotlight_item', (.636, .278)),
     ('spotlight_sheet', (.348, .37)),
     ('spotlight_start', (.895, .84)),
@@ -444,6 +446,118 @@ def test_native_recommendation_is_attempted_with_last_coin_before_refresh():
     assert task.drag_to_book.call_count == 1
     assert task.drag_to_book.call_args.args[0] == task.SHOP_SLOTS[2]
     task.click_relative.assert_not_called()
+
+
+def test_shop_waits_for_recommendations_after_animation_before_refresh():
+    task = make_task()
+    empty = frame('live_shop')
+    marked = cv2.imread(str(FIXTURES / 'live_recommended_shop.png'))
+    sequence = iter([empty, empty, marked])
+
+    def observe():
+        task.executor.frame = next(sequence)
+        return Screen.SHOP
+
+    task.observe = MagicMock(side_effect=observe)
+    task.screenshot = MagicMock()
+    assert task.scan_recommendations() == [False, False, True, False, True]
+    assert task.observe.call_count == 3
+    assert [call.args for call in task.sleep.call_args_list] == [(.6,), (.6,)]
+    diagnostic = task.screenshot.call_args.kwargs['frame']
+    assert diagnostic.shape == (669, 787, 3)
+
+
+def test_missed_visible_hands_stop_instead_of_spending_all_coins_on_refresh():
+    task = make_task()
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_recommended_shop_settled.png'))
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    task.screenshot = MagicMock()
+    task.coins = MagicMock(return_value=6)
+    task.number = MagicMock(return_value=(3, 6))
+    task.click_relative = MagicMock()
+    # Reproduce the live failure independently of the template correction.
+    # Gold marks are unresolved, so neither refresh nor Start is permitted.
+    with patch('src.task.CubieWarsTask.recommended_item', return_value=False):
+        with pytest.raises(RuntimeError, match=r'marks in slots \[3, 5\]'):
+            task.prepare_round()
+    task.click_relative.assert_not_called()
+
+
+@pytest.mark.parametrize('name', ['live_shop', 'shop', 'matching'])
+def test_unmarked_shop_gold_does_not_trigger_uncertain_recommendation_guard(name):
+    image = frame(name)
+    points = [(x, .392 if index < 3 else .64)
+              for index, (x, _) in enumerate(CubieWarsTask.SHOP_SLOTS)]
+    assert not any(possible_recommendation(image, point) for point in points)
+
+
+@pytest.mark.parametrize('after_click', [False, True])
+def test_late_coin_tutorial_interrupts_refresh_even_when_resources_are_readable(after_click):
+    task = make_task()
+    task.executor.frame = frame('live_shop')
+    # Initial Store, then three settled empty scans, then a fresh check before
+    # refresh. The tutorial may also arrive just after the allowed click.
+    screens = [Screen.SHOP]*4 + ([Screen.SHOP, Screen.SPOTLIGHT] if after_click else [Screen.SPOTLIGHT])
+    task.observe = MagicMock(side_effect=screens)
+    task.synthesize = MagicMock()
+    task.screenshot = MagicMock()
+    task.coins = MagicMock(return_value=11)
+    task.number = MagicMock(side_effect=lambda region, fraction=False: (3, 7) if fraction else 1)
+    task.click_relative = MagicMock()
+    with pytest.raises(ShopInterrupted):
+        task.prepare_round()
+    assert task.click_relative.call_count == int(after_click)
+    assert task.coins.call_count == 2  # No false coin-change assertion under the overlay.
+
+
+@pytest.mark.parametrize('initial,following,clicks', [
+    ('1.0X', ['1.5X', '2.0X'], 2),
+    ('1,5x', ['2.0X'], 1),
+    ('2.0X', [], 0),
+])
+def test_speed_advances_to_two_and_never_cycles_back(initial, following, clicks):
+    task = make_task()
+    task._texts = [Text(initial, .93, .16)]
+    sequence = iter(following)
+
+    def observe():
+        task._texts = [Text(next(sequence), .93, .16)]
+        return Screen.COMBAT
+
+    task.observe = MagicMock(side_effect=observe)
+    task.click_relative = MagicMock()
+    task.ensure_combat_speed()
+    assert task.click_relative.call_count == clicks
+
+
+def test_speed_clicks_have_a_limit_if_game_does_not_advance():
+    task = make_task()
+    task._texts = [Text('1.0X', .93, .16)]
+    task.observe = MagicMock(return_value=Screen.COMBAT)
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='after three clicks'):
+        task.ensure_combat_speed()
+    assert task.click_relative.call_count == 3
+
+
+def test_speed_stops_if_combat_ends_during_adjustment():
+    task = make_task()
+    task._texts = [Text('1.0X', .93, .16)]
+    task.observe = MagicMock(return_value=Screen.ROUND_RESULT)
+    task.click_relative = MagicMock()
+    task.ensure_combat_speed()
+    task.click_relative.assert_called_once()
+
+
+def test_first_result_trophy_tip_does_not_hide_the_continue_screen():
+    # Actual labels in the 04:50 live OCR log; the tooltip hides the usual
+    # Current Victories and Retries Available labels until it is dismissed.
+    texts = [Text('Lose', .2, .2), Text('Round1', .45, .1), Text('WIN', .7, .2),
+             Text('Win duels to earn Trophies. Collect every Trophy for', .2, .5),
+             Text('complete victory', .2, .54), Text('Click anywhere to continue', .4, .9)]
+    assert classify(texts) == Screen.ROUND_RESULT
 
 
 @pytest.mark.parametrize('case', json.loads((FIXTURES/'item_categories_ocr.json').read_text(encoding='utf-8')),

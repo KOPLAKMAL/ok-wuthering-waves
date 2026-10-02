@@ -82,8 +82,11 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   hovering so tooltips do not obscure it.
 - Thumb detection searches multiple icon sizes and closes small antialiasing
   gaps. Native captures of the first Story round have smaller hands than the
-  recording. An unreadable marked offer stops before refresh spending instead
-  of being treated as an absent recommendation.
+  recording; both recording and native thumb shapes are reference assets.
+  Recheck an empty scan after animation delays before refreshing. Unresolved
+  gold marks and unreadable marked offers stop before refresh spending instead
+  of being treated as absent recommendations. Save up to 20 compact offer
+  captures per run to diagnose the exact scanned frames.
 - With no eligible recommended purchase, refresh while coins cover the visible
   refresh price and the configured refresh limit permits it. Verify that the
   coin decrease equals the refresh price, then scan the new offers. Start combat
@@ -91,6 +94,10 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
 - Read Start in an enlarged crop of its label and require the Store screen.
   Full-screen OCR read the live label as `Stari`. After clicking the verified
   button, require Matching, combat, or the next tutorial to appear.
+- Recheck for a late tutorial before a purchase or refresh and after refresh.
+  The round-two coin-carryover highlight uses the same verified coin border.
+  When combat shows 1x or 1.5x, advance and observe until 2x; never click 2x,
+  which would cycle back. Stop if three clicks do not advance the control.
 - Test candidate positions in all four orientations. Release only after a
   green placement preview with no red collision cells. On failure or Stop,
   return to the source and release the mouse.
