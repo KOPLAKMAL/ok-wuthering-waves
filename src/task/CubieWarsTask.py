@@ -1,6 +1,8 @@
 import re
 import time
 
+from ok.util.process import is_admin
+
 from src.task.BaseWWTask import BaseWWTask
 from src.task.WWOneTimeTask import WWOneTimeTask
 from src.task.cubie_wars.model import (
@@ -60,6 +62,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
         if screen != Screen.HUB:
             self.stop_with_evidence("Open the Cubie Wars Story Mode / Adventure Mode menu before starting")
+        if not self.is_browser() and not is_admin():
+            self.stop_with_evidence("Restart OK-WW as Administrator using Start Cubie Wars.cmd, then approve Windows UAC")
         WWOneTimeTask.run(self)
         if self.config.get("Mode") == "Astrite run":
             for mode in ("Story", "Adventure"):

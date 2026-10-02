@@ -15,6 +15,11 @@ The shop policy is a heuristic and does not guarantee a stage win.
 5. Use **Astrite run** to attempt uncleared stages and claim rewards, or
    **Claim rewards only** after playing the stages yourself.
 
+On Windows, run OK-WW as Administrator and approve the Windows UAC prompt
+yourself. Live input is blocked with an actionable error when OK-WW has no
+administrator privileges. This prevents silent clicks against an elevated game;
+input-free inspection still works without elevation.
+
 The task reads the stage list again after each attempt; it does not persist
 assumed victories. Stage attempts, shop refreshes, and session duration have
 limits. A changed layout, an unreadable value, an ambiguous purchase, or an

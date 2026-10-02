@@ -127,3 +127,20 @@ def test_inspection_does_not_send_game_input():
     task.mouse_down.assert_not_called()
     task.send_key.assert_not_called()
     task.screenshot.assert_called_once_with('cubie-wars-inspection')
+
+
+def test_windows_run_without_admin_stops_before_sending_input():
+    task = make_task()
+    task.config['Mode'] = 'Astrite run'
+    task.observe = MagicMock(return_value=Screen.HUB)
+    task.is_browser = MagicMock(return_value=False)
+    task.screenshot = MagicMock()
+    task.click_relative = MagicMock()
+    with patch('src.task.CubieWarsTask.is_admin', return_value=False), \
+            patch('src.task.CubieWarsTask.WWOneTimeTask.run') as prepare_input:
+        with pytest.raises(RuntimeError, match='Administrator'):
+            task.run()
+    prepare_input.assert_not_called()
+    task.click_relative.assert_not_called()
+    task.mouse_down.assert_not_called()
+    task.send_key.assert_not_called()
