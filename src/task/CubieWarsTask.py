@@ -75,7 +75,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
         resume_story = self.config.get("Mode") == "Resume Story stage"
         if resume_story:
-            if screen not in {Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.MATCHING,
+            if screen not in {Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.SYNTHESIS, Screen.MATCHING,
                               Screen.COMBAT, Screen.ROUND_RESULT, Screen.STAGE_RESULT, Screen.EVENT}:
                 self.stop_with_evidence("Open the active Story stage before choosing Resume Story stage")
         elif screen != Screen.HUB:
@@ -211,6 +211,11 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             elif screen == Screen.ITEM_TOOLTIP:
                 self.move_relative(.55, .78)
                 self.sleep(.3)
+            elif screen == Screen.SYNTHESIS:
+                try:
+                    self.synthesize()
+                except ShopInterrupted:
+                    continue
             elif screen == Screen.SHOP:
                 round_text = self.text(r"Round\s*\d+.*Store", (.55, .09, .8, .2)).name
                 if last_shop == round_text:
@@ -531,34 +536,69 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         for _ in range(8):
             self.move_relative(.55, .78)
             self.sleep(.2)
-            self.next_frame()
-            recipes = [y for y in (.267, .361, .455, .549) if recipe_available(self.frame, y)]
+            screen = self.observe()
+            if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
+                raise ShopInterrupted()
+            if screen == Screen.SYNTHESIS:
+                recipes = [None]  # Resume an already-open modal or inline recipe.
+            elif screen == Screen.SHOP:
+                recipes = [y for y in (.267, .361, .455, .549) if recipe_available(self.frame, y)]
+            else:
+                self.stop_with_evidence("Cubie Wars screen changed before synthesis")
             synthesized = False
             for y in recipes:
-                # The observed recipes are circular icons in the left margin;
-                # selecting one exposes a yellow button over its ingredients.
-                self.click_relative(.058, y, after_sleep=.35)
-                self.observe()
+                if y is not None:
+                    # A recipe can open an inline button or a full-screen card.
+                    self.click_relative(.058, y, after_sleep=.35)
+                    screen = self.observe()
+                if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
+                    raise ShopInterrupted()
+                if screen not in {Screen.SHOP, Screen.SYNTHESIS}:
+                    self.stop_with_evidence("Cubie Wars recipe screen is unrecognized")
                 button = next((t for t in self._texts if re.fullmatch(r"Synthesize", t.name, re.I)
                                and .11 < t.center[0] < .98 and .15 < t.center[1] < .75
                                and yellow_button(self.frame, t.center)), None)
                 if not button:
+                    if screen == Screen.SYNTHESIS:
+                        self.leave_synthesis()
                     continue
-                used, _ = self.number((.139, .103, .178, .139), fraction=True)
-                self.click_relative(*button.center, after_sleep=.5)
-                self.move_relative(.55, .78)
-                self.sleep(.2)
-                self.next_frame()
-                current, _ = self.number((.139, .103, .178, .139), fraction=True)
-                if current < used:
-                    self.restore_storage()
+                # The modal hides book capacity, and an upgrade can retain the
+                # same weight. Click first, return to Store, then check Storage.
+                self.click_relative(*button.center, after_sleep=.8)
+                self.leave_synthesis()
+                self.restore_storage()
                 self.info_incr("Cubie Wars synthesis attempts")
                 synthesized = True
                 break
             if not synthesized:
-                break
-        self.move_relative(.55, .78)
-        self.click_relative(.55, .78, after_sleep=.2)
+                return
+        screen = self.observe()
+        if screen == Screen.SHOP and not any(recipe_available(self.frame, y)
+                                            for y in (.267, .361, .455, .549)):
+            return
+        self.stop_with_evidence("Cubie Wars synthesis action limit reached; check the remaining recipes")
+
+    def leave_synthesis(self):
+        """Dismiss a verified recipe selection before reading Store resources."""
+        for _ in range(6):
+            self.move_relative(.45, .92)
+            self.sleep(.35)
+            screen = self.observe()
+            if screen == Screen.SHOP:
+                return
+            if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
+                raise ShopInterrupted()
+            if screen == Screen.SYNTHESIS:
+                modal = self.text(r"Items Available for Synthesis", (.45, .1, 1, .4))
+                if modal:
+                    if not self.text(r"Click anywhere to close", (.2, .8, .85, 1)):
+                        self.stop_with_evidence("Cubie Wars synthesis close instruction is unreadable")
+                    self.click_relative(.5, .9, after_sleep=.4)
+                else:
+                    self.click_relative(.55, .78, after_sleep=.3)
+            elif screen not in {Screen.UNKNOWN, Screen.ITEM_TOOLTIP}:
+                self.stop_with_evidence("Cubie Wars screen changed after synthesis")
+        self.stop_with_evidence("Cubie Wars synthesis panel did not return to the Store")
 
     def restore_storage(self):
         """A synthesis can leave the larger replacement weapon in Storage."""

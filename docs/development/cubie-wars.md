@@ -119,13 +119,14 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   mouse state. Release runs even after focus loss; posted mouse movement and
   activation are suppressed during the native drag. Read each
   offer's price before hovering and retry tooltip OCR for four fresh frames;
-  tutorial interruptions return control to their handler. Live purchase and
-  drag still need validation with this adapter.
+  tutorial interruptions return control to their handler. The 06:31 run
+  confirms a Crystal purchase/placement with coins decreasing from 5 to 4.
+  Other item shapes still require live validation.
 - The user's held Crystal screenshot already passes the existing green mask:
   1208 green pixels and no red collision at 1920 pixels wide. It is a regression
   fixture at 1280/1920/2560, not proof that the bot's earlier captured preview
   matched the user's manual preview. Native drag and settling changes remain
-  pending live validation. Tests cover a stale first frame, transient green,
+  verified for Crystal in the 06:31 run. Tests cover a stale first frame, transient green,
   partial green plus red beyond the book, and retry after sheet expansion.
 - The 06:07 live run saved the missing evidence: its centered Crystal hides
   the green ghost, yielding zero accepted green/red components despite being
@@ -133,7 +134,7 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   slightly right and down. When centered previews remain unresolved, move
   24 pixels right/16 down, then 24 left/16 up (scaled from 1920x1080), within
   the same 102-pixel cell before rotating. Red collision previews skip these
-  offsets. Stable green is still required; nudging is pending live validation.
+  offsets. Stable green is still required; the 06:31 run confirms Crystal placement.
   Board-only before/held captures reproduce the missed preview in tests.
 - The 05:36 run confirms real hover opened the native "Random" Crystal card.
   Its Accessory label is below Adventurer, not beside it; read either layout
@@ -143,6 +144,15 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   clears that card before reading the round or taking shop actions.
 - Try available yellow Synthesize buttons, bounded shop refreshes, and 2x
   combat speed. Adventure currently selects Lynae; Story uses its fixed Cubie.
+- The 06:31 run opened a Sword of Night synthesis modal after purchasing the
+  Crystal, then failed reading book capacity hidden by that modal. Both modal
+  and inline synthesis now click an observed yellow Synthesize button without
+  reading capacity first. Return to the recognized Store before checking for
+  a replacement weapon in Storage, even when its weight stays unchanged.
+  Close modal recipes using their verified Click anywhere to close instruction;
+  clear inline selections through the Storage area. Resume Story stage accepts
+  an already-open synthesis panel. Capture/OCR fixtures cover the real modal;
+  actual crafting and subsequent placement remain pending live validation.
 
 ## Current limitations / live validation still required
 

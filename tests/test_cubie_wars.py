@@ -23,6 +23,7 @@ from src.task.cubie_wars.vision import (
 FIXTURES = Path(__file__).parent / 'images' / 'cubie_wars'
 CASES = json.loads((FIXTURES / 'ocr.json').read_text(encoding='utf-8'))
 LIVE_HOVER = json.loads((FIXTURES / 'live_hover_ocr.json').read_text(encoding='utf-8'))
+LIVE_SYNTHESIS = json.loads((FIXTURES / 'live_synthesis_modal_ocr.json').read_text(encoding='utf-8'))
 
 
 def frame(name):
@@ -76,6 +77,115 @@ def test_recorded_synthesis_controls_and_storage_tag():
     assert not recipe_available(frame('shop'), .267)
     assert yellow_button(frame('synthesis_book'), (.164, .49))
     assert capacity_tag(frame('storage'), (.535, .731))
+
+
+def test_live_modal_synthesis_button_is_recognized_and_enabled():
+    texts = [Text(**t) for t in LIVE_SYNTHESIS]
+    assert classify(texts) == Screen.SYNTHESIS
+    button = next(t for t in texts if t.name == 'Synthesize')
+    assert yellow_button(cv2.imread(str(FIXTURES / 'live_synthesis_modal.png')), button.center)
+
+
+@pytest.mark.parametrize('already_open', [False, True])
+def test_synthesis_clicks_before_hidden_capacity_and_returns_to_shop(already_open):
+    task = make_task()
+    modal = cv2.imread(str(FIXTURES / 'live_synthesis_modal.png'))
+    shop = frame('shop')
+    sequence = ([Screen.SYNTHESIS] if already_open else [Screen.SHOP, Screen.SYNTHESIS]) + [
+        Screen.SYNTHESIS, Screen.SHOP, Screen.SHOP]
+    screens = iter(sequence)
+
+    def observe():
+        screen = next(screens)
+        task.executor.frame = modal if screen == Screen.SYNTHESIS else shop
+        task._texts = [Text(**t) for t in LIVE_SYNTHESIS] if screen == Screen.SYNTHESIS else []
+        return screen
+
+    task.observe = MagicMock(side_effect=observe)
+    task.number = MagicMock(side_effect=AssertionError('Book capacity is hidden'))
+    task.click_relative = MagicMock()
+    task.info_incr = MagicMock()
+    task.restore_storage = MagicMock(side_effect=lambda: pytest.fail('Storage read in modal')
+                                    if task.executor.frame is modal else None)
+    availability = ([True, False, False, False] if not already_open else []) + [False] * 4
+    with patch('src.task.CubieWarsTask.recipe_available', side_effect=availability):
+        task.synthesize()
+    button = next(Text(**t) for t in LIVE_SYNTHESIS if t['name'] == 'Synthesize')
+    clicks = [call.args for call in task.click_relative.call_args_list]
+    assert clicks == ([] if already_open else [(.058, .267)]) + [button.center, (.5, .9)]
+    task.number.assert_not_called()
+    task.restore_storage.assert_called_once()
+    task.info_incr.assert_called_once_with('Cubie Wars synthesis attempts')
+
+
+def test_unavailable_modal_recipe_closes_without_synthesizing():
+    task = make_task()
+    modal = cv2.imread(str(FIXTURES / 'live_synthesis_modal.png'))
+    disabled = [Text(**t) for t in LIVE_SYNTHESIS if t['name'] != 'Synthesize']
+    screens = iter([Screen.SYNTHESIS, Screen.SYNTHESIS, Screen.SHOP])
+
+    def observe():
+        screen = next(screens)
+        task._texts = disabled if screen == Screen.SYNTHESIS else []
+        task.executor.frame = modal if screen == Screen.SYNTHESIS else frame('shop')
+        return screen
+
+    task.observe = MagicMock(side_effect=observe)
+    task.number = MagicMock()
+    task.click_relative = MagicMock()
+    task.restore_storage = MagicMock()
+    task.info_incr = MagicMock()
+    task.synthesize()
+    task.click_relative.assert_called_once_with(.5, .9, after_sleep=.4)
+    task.number.assert_not_called()
+    task.restore_storage.assert_not_called()
+    task.info_incr.assert_not_called()
+
+
+def test_inline_synthesis_returns_to_book_before_storage_check():
+    task = make_task()
+    screens = iter([Screen.SYNTHESIS, Screen.SYNTHESIS, Screen.SHOP, Screen.SHOP])
+    button = Text('Synthesize', .127, .475, .071, .033)
+
+    def observe():
+        screen = next(screens)
+        task._texts = [button] if screen == Screen.SYNTHESIS else []
+        task.executor.frame = frame('synthesis_book') if screen == Screen.SYNTHESIS else frame('shop')
+        return screen
+
+    task.observe = MagicMock(side_effect=observe)
+    task.number = MagicMock()
+    task.click_relative = MagicMock()
+    task.restore_storage = MagicMock()
+    task.info_incr = MagicMock()
+    with patch('src.task.CubieWarsTask.recipe_available', return_value=False):
+        task.synthesize()
+    assert [call.args for call in task.click_relative.call_args_list] == [button.center, (.55, .78)]
+    task.number.assert_not_called()
+    task.restore_storage.assert_called_once()
+
+
+@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SPOTLIGHT])
+def test_tutorial_after_synthesis_defers_storage_and_resource_reads(screen):
+    task = make_task()
+    task.observe = MagicMock(return_value=screen)
+    task.number = MagicMock()
+    with pytest.raises(ShopInterrupted):
+        task.leave_synthesis()
+    task.number.assert_not_called()
+
+
+def test_unclosable_synthesis_panel_stops_without_reading_resources():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.SYNTHESIS)
+    task._texts = [Text(**t) for t in LIVE_SYNTHESIS if 'close' not in t['name']]
+    task.number = MagicMock()
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='close instruction'):
+        task.leave_synthesis()
+    task.number.assert_not_called()
+    task.click_relative.assert_not_called()
 
 
 def test_drop_requires_green_preview_and_rejects_collision():
@@ -354,10 +464,11 @@ def test_unreadable_resource_still_stops_after_bounded_retries():
     assert task.ocr.call_count == 4
 
 
-def test_resume_story_rejoins_stage_verification_and_rewards():
+@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SYNTHESIS])
+def test_resume_story_rejoins_stage_verification_and_rewards(screen):
     task = make_task()
     task.config['Mode'] = 'Resume Story stage'
-    task.observe = MagicMock(return_value=Screen.GUIDE)
+    task.observe = MagicMock(return_value=screen)
     task.is_browser = MagicMock(return_value=False)
     task.play_stage = MagicMock()
     task.wait_screen = MagicMock()
@@ -370,6 +481,26 @@ def test_resume_story_rejoins_stage_verification_and_rewards():
     task.play_stage.assert_called_once_with('Story')
     assert [call.args for call in task.complete_mode.call_args_list] == [('Story',), ('Adventure',)]
     task.claim_rewards.assert_called_once()
+
+
+def test_stage_handles_open_synthesis_before_preparing_shop():
+    task = make_task()
+    screens = iter([Screen.SYNTHESIS, Screen.SHOP, Screen.SHOP, Screen.STAGE_RESULT])
+
+    def observe():
+        screen = next(screens)
+        task._texts = [Text('Round 1 - Store', .6, .1)]
+        return screen
+
+    task.observe = MagicMock(side_effect=observe)
+    actions = MagicMock()
+    task.synthesize = actions.synthesize
+    task.prepare_round = actions.prepare_round
+    task.prepare_round.return_value = True
+    task.start_round = actions.start_round
+    task.click_text = MagicMock()
+    task.play_stage('Story')
+    assert [call[0] for call in actions.mock_calls] == ['synthesize', 'prepare_round', 'start_round']
 
 
 @pytest.mark.parametrize('name,anchor', [
