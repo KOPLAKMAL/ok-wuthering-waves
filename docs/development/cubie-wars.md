@@ -80,10 +80,17 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   Within a category, rank by damage per attack interval, role, and defensive
   effects. An unknown category is skipped. The thumb is detected before
   hovering so tooltips do not obscure it.
+- Thumb detection searches multiple icon sizes and closes small antialiasing
+  gaps. Native captures of the first Story round have smaller hands than the
+  recording. An unreadable marked offer stops before refresh spending instead
+  of being treated as an absent recommendation.
 - With no eligible recommended purchase, refresh while coins cover the visible
   refresh price and the configured refresh limit permits it. Verify that the
   coin decrease equals the refresh price, then scan the new offers. Start combat
   when no further purchases or refreshes are possible within those limits.
+- Read Start in an enlarged crop of its label and require the Store screen.
+  Full-screen OCR read the live label as `Stari`. After clicking the verified
+  button, require Matching, combat, or the next tutorial to appear.
 - Test candidate positions in all four orientations. Release only after a
   green placement preview with no red collision cells. On failure or Stop,
   return to the source and release the mouse.
@@ -120,6 +127,10 @@ The thumb asset and Store fixtures also come from the recording. Native-size
 coin and price crops reproduce the live OCR failure and its correction with the
 same OCR settings as the application; these tests still do not prove live input
 or a stage win.
+Native Store PNGs reproduce the two smaller thumbs, both during the refresh
+animation and after it settles, with the user-ID strip removed. Tests preserve
+the distinction between thumbs and gold price-badge borders, and verify an
+attempt with the last coin before any refresh.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_cubie_wars.py -q -p no:cacheprovider

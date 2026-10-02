@@ -214,7 +214,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     continue
                 if prepared_screen != Screen.SHOP:
                     self.stop_with_evidence("Shop layout changed during preparation")
-                self.click_text(r"^Start$", (.8, .8, 1, .95))
+                self.start_round()
                 last_shop = round_text
             elif screen == Screen.COMBAT:
                 if self.text(r"1[.,]0\s*[Xx]", (.85, .12, .98, .22)):
@@ -258,6 +258,18 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.sleep(.35)
         self.stop_with_evidence(f"Cubie Wars resource value is unreadable: {region}")
 
+    def start_round(self):
+        if classify(self._texts) != Screen.SHOP:
+            self.stop_with_evidence("Expected the round Store before clicking Start")
+        # Full-screen OCR read the live button as 'Stari'. A focused, enlarged
+        # label reads 'Start'; consume only its text, not the scaled coordinates.
+        labels = self.ocr(.855, .883, .932, .929, frame=self.frame,
+                          threshold=.75, frame_processor=number_frame)
+        if not any(re.fullmatch(r"Start", label.name.strip(), re.I) for label in labels):
+            self.stop_with_evidence("Cubie Wars Start label was not recognized in the button")
+        self.click_relative(.895, .85, after_sleep=.6)
+        self.wait_screen({Screen.MATCHING, Screen.COMBAT, Screen.SPOTLIGHT, Screen.GUIDE})
+
     def coins(self):
         return self.number((.934, .121, .966, .162))
 
@@ -280,6 +292,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 offers = []
                 recommended = [recommended_item(self.frame, (x, .392 if index < 3 else .64))
                                for index, (x, _) in enumerate(self.SHOP_SLOTS)]
+                self.log_info(f"Cubie Wars: recommended shop slots "
+                              f"{[index + 1 for index, marked in enumerate(recommended) if marked]}, "
+                              f"coins {coins}, capacity {used}/{maximum}")
                 for index, (x, y) in enumerate(self.SHOP_SLOTS):
                     if index in skipped or not recommended[index]:
                         continue
@@ -292,7 +307,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     price_text = " ".join(b.name for b in price_boxes)
                     price_match = re.fullmatch(r"\s*(\d{1,2})\s*", price_text)
                     if not price_match:
-                        continue  # Sold, empty, or an unreadable discounted price.
+                        self.stop_with_evidence(f"Recommended slot {index + 1} price is unreadable; "
+                                                "stopped before spending coins on refresh")
                     price = int(price_match[1])
                     if not 0 < price <= coins:
                         continue
@@ -300,10 +316,14 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     tooltip = [Text(b.name, b.x / self.width, b.y / self.height,
                                     b.width / self.width, b.height / self.height) for b in tooltip_boxes]
                     item = parse_item(tooltip)
-                    if item:
-                        rank = item.purchase_rank(self._role, maximum - used, free, price)
-                        if rank is not None:
-                            offers.append((rank, index, item))
+                    if not item or not item.category:
+                        self.stop_with_evidence(f"Recommended slot {index + 1} tooltip is unreadable; "
+                                                "stopped before spending coins on refresh")
+                    rank = item.purchase_rank(self._role, maximum - used, free, price)
+                    self.log_info(f"Cubie Wars: slot {index + 1} {item.name} ({item.category}), "
+                                  f"price {price}, eligible {rank is not None}")
+                    if rank is not None:
+                        offers.append((rank, index, item))
                 if not offers:
                     break
                 _, index, item = max(offers, key=lambda offer: offer[0])

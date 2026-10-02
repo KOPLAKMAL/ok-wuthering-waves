@@ -39,9 +39,20 @@ def recommended_item(frame, point):
     # Each recommendation thumb sits above the price badge's right edge.
     tile = crop(frame, (x+.023, y-.070, x+.057, y-.020))
     hsv = cv2.cvtColor(tile, cv2.COLOR_BGR2HSV)
-    gold = cv2.inRange(hsv, (15, 65, 150), (40, 255, 255))
-    gold = cv2.resize(gold, (65, 54), interpolation=cv2.INTER_NEAREST)
-    return cv2.minMaxLoc(cv2.matchTemplate(gold, _thumb_template(), cv2.TM_CCOEFF_NORMED))[1] > .78
+    # Native game captures have a smaller, sharper thumb than the recording.
+    # Close tiny antialiasing gaps and search sizes, retaining the shape check
+    # so the gold price-badge edge is not mistaken for a recommendation.
+    # The stricter mask removes the brown outline's antialiasing at 1280px.
+    for saturation in (65, 80):
+        gold = cv2.inRange(hsv, (15, saturation, 150), (40, 255, 255))
+        gold = cv2.resize(gold, (65, 54), interpolation=cv2.INTER_NEAREST)
+        gold = cv2.morphologyEx(gold, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        for scale in (.65, .7, .75, .8, .85, .9, .95, 1, 1.05, 1.1, 1.15):
+            template = cv2.resize(_thumb_template(), None, fx=scale, fy=scale,
+                                  interpolation=cv2.INTER_NEAREST)
+            if cv2.minMaxLoc(cv2.matchTemplate(gold, template, cv2.TM_CCOEFF_NORMED))[1] > .78:
+                return True
+    return False
 
 
 def spotlight_target(frame, anchor):

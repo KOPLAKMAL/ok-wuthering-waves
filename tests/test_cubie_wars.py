@@ -300,10 +300,11 @@ def test_start_highlight_arriving_after_preparation_returns_to_tutorial():
     task.prepare_round = MagicMock(return_value=True)
     task.handle_spotlight = MagicMock()
     task.click_text = MagicMock()
+    task.start_round = MagicMock()
     task.play_stage('Story')
     task.handle_spotlight.assert_called_once()
     # The tutorial handler owns Start while the overlay is present.
-    assert all(call.args[0] != r'^Start$' for call in task.click_text.call_args_list)
+    task.start_round.assert_not_called()
 
 
 def test_resource_fallback_uses_recorded_full_screen_numbers():
@@ -352,6 +353,97 @@ def test_recorded_recommendation_thumbs_and_unmarked_slots(width, name, expected
     points = [(x, .392 if index < 3 else .64)
               for index, (x, _) in enumerate(CubieWarsTask.SHOP_SLOTS)]
     assert [recommended_item(image, point) for point in points] == expected
+
+
+@pytest.mark.parametrize('width', [1280, 1920, 2560])
+@pytest.mark.parametrize('name', ['live_recommended_shop', 'live_recommended_shop_settled'])
+def test_native_smaller_thumbs_are_not_skipped_during_or_after_refresh_animation(width, name):
+    image = cv2.imread(str(FIXTURES / (name + '.png')))
+    image = cv2.resize(image, (width, width*9//16))
+    points = [(x, .392 if index < 3 else .64)
+              for index, (x, _) in enumerate(CubieWarsTask.SHOP_SLOTS)]
+    # Gold price-badge edges in slots 1 and 2 are not recommendation hands.
+    assert [recommended_item(image, point) for point in points] == [False, False, True, False, True]
+
+
+def test_start_uses_focused_label_when_full_screen_ocr_reads_stari():
+    task = make_task()
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_recommended_shop.png'))
+    task._texts = [Text('Round 1 - Store', .57, .14), Text('Storage Box', .45, .92),
+                   Text('Stari', .87, .89)]
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='Start')])
+    task.click_relative = MagicMock()
+    task.wait_screen = MagicMock()
+    task.start_round()
+    assert task.ocr.call_args.kwargs['frame_processor'] is number_frame
+    task.click_relative.assert_called_once_with(.895, .85, after_sleep=.6)
+    task.wait_screen.assert_called_once_with({Screen.MATCHING, Screen.COMBAT, Screen.SPOTLIGHT, Screen.GUIDE})
+
+
+@pytest.mark.parametrize('screen', [Screen.MATCHING, Screen.SPOTLIGHT, Screen.UNKNOWN])
+def test_start_rejects_other_screens_even_with_a_start_label(screen):
+    task = make_task()
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='Start')])
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.classify', return_value=screen):
+        with pytest.raises(RuntimeError, match='before clicking Start'):
+            task.start_round()
+    task.click_relative.assert_not_called()
+
+
+def test_start_does_not_guess_if_focused_label_is_unreadable():
+    task = make_task()
+    task._texts = [Text('Round 1 - Store', .57, .14), Text('Storage Box', .45, .92)]
+    task.ocr = MagicMock(return_value=[])
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='Start label'):
+        task.start_round()
+    task.click_relative.assert_not_called()
+
+
+@pytest.mark.parametrize('missing', ['price', 'tooltip'])
+def test_unreadable_recommended_offer_stops_before_spending_on_refresh(missing):
+    task = make_task()
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_recommended_shop.png'))
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    task.coins = MagicMock(return_value=1)
+    task.number = MagicMock(return_value=(3, 6))
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
+                         [] if missing == 'price' or args == (.2, .075, .68, .7)
+                         else [SimpleNamespace(name='1')])
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match=f'{missing} is unreadable'):
+        task.prepare_round()
+    task.click_relative.assert_not_called()
+
+
+def test_native_recommendation_is_attempted_with_last_coin_before_refresh():
+    task = make_task()
+    task.executor.method.width, task.executor.method.height = 1920, 1080
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_recommended_shop.png'))
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    task.coins = MagicMock(side_effect=[1, 1, 0, 0, 0])
+    task.number = MagicMock(side_effect=lambda region, fraction=False: (3, 6) if fraction else 2)
+    case = next(c for c in json.loads((FIXTURES / 'item_categories_ocr.json').read_text())
+                if c['category'] == 'Relic')
+    tooltip = [SimpleNamespace(name=t['name'], x=t['x']*1920, y=t['y']*1080,
+                               width=t['width']*1920, height=t['height']*1080)
+               for t in case['texts']]
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
+                         tooltip if args == (.2, .075, .68, .7) else [SimpleNamespace(name='1')])
+    task.drag_to_book = MagicMock(return_value=True)
+    task.click_relative = MagicMock()
+    assert task.prepare_round() is True
+    # Uses real native thumb detection and a recorded tooltip. Both marked
+    # offers are considered; the first affordable one is purchased, not rerolled.
+    assert task.drag_to_book.call_count == 1
+    assert task.drag_to_book.call_args.args[0] == task.SHOP_SLOTS[2]
+    task.click_relative.assert_not_called()
 
 
 @pytest.mark.parametrize('case', json.loads((FIXTURES/'item_categories_ocr.json').read_text(encoding='utf-8')),
@@ -429,3 +521,9 @@ def test_actual_coin_crop_ocr_works_after_enlarging():
     price = cv2.imread(str(FIXTURES/'live_price_crop.png'))
     prices = [(value, confidence) for _, (value, confidence) in engine.ocr(number_frame(price))[0]]
     assert len(prices) == 1 and prices[0][0] == '3' and prices[0][1] > .65
+    # The full-screen log read this native button as Stari. Replay the exact
+    # focused crop (same rounding as the framework) through the real OCR engine.
+    image = cv2.imread(str(FIXTURES / 'live_recommended_shop.png'))
+    start = image[954:1004, 1642:1790]
+    labels = [(value, confidence) for _, (value, confidence) in engine.ocr(number_frame(start))[0]]
+    assert len(labels) == 1 and labels[0][0] == 'Start' and labels[0][1] > .75
