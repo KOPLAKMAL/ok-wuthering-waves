@@ -26,6 +26,10 @@ input-free inspection still works without elevation.
 The first Store phase waits for its round splash and observes again before
 shopping. A delayed tutorial returns control to the tutorial handler. Unreadable
 resources are retried a bounded number of times; they never default to zero.
+Numeric crops are enlarged three times before OCR. The live 61×44 coin crop
+returned no detections at its original size; the enlarged crop correctly reads
+6 with the application's OCR settings. Discounted prices use a narrow crop of
+the active price, excluding the crossed-out old price.
 If a small crop misses a number, the task accepts a single complete numeric
 label from full-screen OCR inside the same resource region. Tutorials take
 precedence over this fallback.
@@ -70,9 +74,16 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
 
 - Hold the left mouse button to drag; press **R** to rotate while holding.
 - A purchase is attempted only with a readable price, adequate coins, and a
-  recognized tooltip. Weapon COST must fit the remaining capacity.
-- Rank items by damage per attack interval, character role, and defensive
-  effects. Prefer Sheets when few empty cells remain.
+  recognized tooltip and a gold recommendation thumb above its price badge.
+  Weapon COST must fit the remaining capacity.
+- Buy recommended items in this order: Weapon, Sheet, Accessory, Relic, Item.
+  Within a category, rank by damage per attack interval, role, and defensive
+  effects. An unknown category is skipped. The thumb is detected before
+  hovering so tooltips do not obscure it.
+- With no eligible recommended purchase, refresh while coins cover the visible
+  refresh price and the configured refresh limit permits it. Verify that the
+  coin decrease equals the refresh price, then scan the new offers. Start combat
+  when no further purchases or refreshes are possible within those limits.
 - Test candidate positions in all four orientations. Release only after a
   green placement preview with no red collision cells. On failure or Stop,
   return to the source and release the mouse.
@@ -105,6 +116,10 @@ recording frames, not hand-written ideal labels. Small JPEG replay fixtures
 have the user-ID strip removed. The claimed-check asset comes from the same
 recording. The video, account configuration, caches, and runtime logs are not
 part of the feature.
+The thumb asset and Store fixtures also come from the recording. Native-size
+coin and price crops reproduce the live OCR failure and its correction with the
+same OCR settings as the application; these tests still do not prove live input
+or a stage win.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_cubie_wars.py -q -p no:cacheprovider

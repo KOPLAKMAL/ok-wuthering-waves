@@ -9,11 +9,11 @@ import pytest
 
 from src.task.CubieWarsTask import CubieWarsTask, ShopInterrupted
 from src.task.cubie_wars.model import (
-    ADVENTURE_COUNT, ASTRITE_TOTAL, Screen, Text, classify, next_stage, parse_item,
+    ADVENTURE_COUNT, ASTRITE_TOTAL, Item, Screen, Text, classify, next_stage, parse_item,
     spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
-    capacity_tag, green_check, placement_points, recipe_available,
+    capacity_tag, green_check, number_frame, placement_points, recipe_available, recommended_item,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -50,6 +50,7 @@ def test_tooltip_stats_and_capacity_guard():
     texts = next(case['texts'] for case in CASES if case['name'] == 'shop_tooltip')
     item = parse_item([Text(**t) for t in texts])
     assert (item.name, item.role, item.cost, item.damage, item.interval) == ('Training Sword', 'Rapier', 3, 6, 2)
+    assert item.category == 'Weapon'
     assert item.score('Rapier', 2, 5, 2) == 0
     assert item.score('Rapier', 3, 5, 2) > item.score('Gold Hunter', 3, 5, 2)
 
@@ -338,3 +339,93 @@ def test_resource_fallback_rejects_unrelated_or_ambiguous_numbers(texts):
     with pytest.raises(RuntimeError, match='resource value is unreadable'):
         task.coins()
     assert task.ocr.call_count == 4
+
+
+@pytest.mark.parametrize('width', [1280, 1920, 2560])
+@pytest.mark.parametrize('name,expected', [
+    ('recommended_shop', [False, False, True, True, False]),
+    ('recommended_shop_2', [False, True, True, True, False]),
+    ('live_shop', [False, False, False, False, False]),
+])
+def test_recorded_recommendation_thumbs_and_unmarked_slots(width, name, expected):
+    image = cv2.resize(frame(name), (width, width*9//16))
+    points = [(x, .392 if index < 3 else .64)
+              for index, (x, _) in enumerate(CubieWarsTask.SHOP_SLOTS)]
+    assert [recommended_item(image, point) for point in points] == expected
+
+
+@pytest.mark.parametrize('case', json.loads((FIXTURES/'item_categories_ocr.json').read_text(encoding='utf-8')),
+                         ids=lambda case: case['name'])
+def test_recorded_item_categories(case):
+    item = parse_item([Text(**t) for t in case['texts']])
+    assert item.category == case['category']
+    if item.category != 'Sheet':
+        assert item.cost == 0
+    assert not re.search(r'\d+/\d+', item.name)
+
+
+def test_purchase_order_is_weapon_sheet_accessory_relic_item():
+    ordered = [Item(kind, 'Adventurer', kind == 'Sheet', 0, 0, 1, '', kind)
+               for kind in ('Weapon', 'Sheet', 'Accessory', 'Relic', 'Item')]
+    ranks = [item.purchase_rank('Adventurer', 6, 5, 1) for item in ordered]
+    assert ranks == sorted(ranks, reverse=True)
+    full = Item('Sword', 'Rapier', False, 3, 6, 2, '', 'Weapon')
+    assert full.purchase_rank('Rapier', 2, 5, 1) is None
+
+
+def test_accessory_category_is_read_from_header_not_weapon_text_in_description():
+    item = parse_item([Text('Accessory name', .3, .1), Text('Adventurer', .3, .15),
+                       Text('Accessory', .45, .15), Text('Grants Weapon DMG', .3, .25)])
+    assert item.category == 'Accessory' and item.cost == 0
+
+
+def test_shop_attempts_recommended_weapons_before_sheets_and_accessories():
+    task = make_task()
+    task.executor.frame = frame('live_shop')
+    task.config['Refreshes per round'] = 0
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    task.coins = MagicMock(return_value=6)
+    task.number = MagicMock(return_value=(3, 6))
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
+                         [] if args == (.2, .075, .68, .7) else [SimpleNamespace(name='3')])
+    task.drag_to_book = MagicMock(return_value=False)
+    items = {x: Item(kind, 'Adventurer', kind == 'Sheet', 0, 0, 1, '', kind)
+             for x, kind in zip((.636, .766, .895), ('Weapon', 'Sheet', 'Accessory'))}
+    with patch('src.task.CubieWarsTask.recommended_item', side_effect=lambda image, point: point[1] == .392), \
+            patch('src.task.CubieWarsTask.parse_item', side_effect=lambda texts:
+                  items[task.move_relative.call_args.args[0]]):
+        assert task.prepare_round() is True
+    assert [call.args[0] for call in task.drag_to_book.call_args_list] == list(task.SHOP_SLOTS[:3])
+
+
+def test_no_thumb_skips_tooltips_and_refreshes_before_combat():
+    task = make_task()
+    task.executor.frame = frame('live_shop')
+    task.config['Refreshes per round'] = 2
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    task.coins = MagicMock(side_effect=[6, 6, 5, 5, 5, 4, 4])
+    task.number = MagicMock(side_effect=lambda region, fraction=False: (3, 6) if fraction else 1)
+    task.ocr = MagicMock()
+    task.drag_to_book = MagicMock()
+    task.click_relative = MagicMock()
+    assert task.prepare_round() is True
+    task.ocr.assert_not_called()
+    task.drag_to_book.assert_not_called()
+    assert task.click_relative.call_count == 2
+    assert all(call.args == (.895, .574) for call in task.click_relative.call_args_list)
+
+
+def test_actual_coin_crop_ocr_works_after_enlarging():
+    from onnxocr.onnx_paddleocr import ONNXPaddleOcr
+    engine = ONNXPaddleOcr(use_openvino=True, use_npu=True)
+    tile = cv2.imread(str(FIXTURES/'live_coins_crop.png'))
+    assert tile.shape == (44, 61, 3)
+    processed = number_frame(tile)
+    assert processed.shape == (132, 183, 3)
+    labels = [(value, confidence) for _, (value, confidence) in engine.ocr(processed)[0]]
+    assert len(labels) == 1 and labels[0][0] == '6' and labels[0][1] > .65
+    price = cv2.imread(str(FIXTURES/'live_price_crop.png'))
+    prices = [(value, confidence) for _, (value, confidence) in engine.ocr(number_frame(price))[0]]
+    assert len(prices) == 1 and prices[0][0] == '3' and prices[0][1] > .65

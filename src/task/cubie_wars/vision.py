@@ -18,6 +18,32 @@ def stage_label_frame(frame):
     return cv2.cvtColor(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
 
 
+def number_frame(frame):
+    # A one-pixel crop-width difference made the live 61 x 44 coin crop yield
+    # no detection. Actually enlarge small numbers; target_height only scales
+    # down in the framework. These OCR callers consume names, not coordinates.
+    return cv2.resize(frame, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+
+
+@lru_cache(maxsize=1)
+def _thumb_template():
+    path = Path(__file__).resolve().parents[3] / 'assets' / 'cubie_wars' / 'recommended_thumb.png'
+    template = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if template is None:
+        raise RuntimeError('Missing Cubie Wars recommended-thumb asset')
+    return template
+
+
+def recommended_item(frame, point):
+    x, y = point
+    # Each recommendation thumb sits above the price badge's right edge.
+    tile = crop(frame, (x+.023, y-.070, x+.057, y-.020))
+    hsv = cv2.cvtColor(tile, cv2.COLOR_BGR2HSV)
+    gold = cv2.inRange(hsv, (15, 65, 150), (40, 255, 255))
+    gold = cv2.resize(gold, (65, 54), interpolation=cv2.INTER_NEAREST)
+    return cv2.minMaxLoc(cv2.matchTemplate(gold, _thumb_template(), cv2.TM_CCOEFF_NORMED))[1] > .78
+
+
 def spotlight_target(frame, anchor):
     """Find the bright rounded yellow tutorial border near its known control."""
     h, w = frame.shape[:2]

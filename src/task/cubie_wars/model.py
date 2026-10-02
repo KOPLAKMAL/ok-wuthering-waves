@@ -115,6 +115,7 @@ ROLES = ("Adventurer", "Rapier", "Traumatizer", "Heavy Hitter", "Gold Hunter")
 ASTRITE_TOTAL = 1200
 STORE_OFFERS = ((50, 200), (50, 200), (100, 500), (100, 500))
 MILESTONES = (250, 750)
+CATEGORY_PRIORITY = {'Weapon': 0, 'Sheet': 1, 'Accessory': 2, 'Relic': 3, 'Item': 4}
 
 
 def next_stage(mode, checks):
@@ -134,6 +135,13 @@ class Item:
     damage: float
     interval: float
     description: str
+    category: str = ''
+
+    def purchase_rank(self, role, spare_capacity, free_cells, price):
+        score = self.score(role, spare_capacity, free_cells, price)
+        if self.category not in CATEGORY_PRIORITY or score <= 0:
+            return None
+        return -CATEGORY_PRIORITY[self.category], score
 
     def score(self, role, spare_capacity, free_cells, price):
         if price <= 0:
@@ -159,7 +167,7 @@ def parse_item(texts):
         return None
     role = next(r for r in ROLES if r.lower() in role_text.name.lower())
     above = [t for t in texts if role_text.y - .09 < t.y < role_text.y - .01
-             and abs(t.x - role_text.x) < .2]
+             and abs(t.x - role_text.x) < .06]
     name = joined(above).strip()
     if not name:
         return None
@@ -175,10 +183,17 @@ def parse_item(texts):
         values = re.findall(r"\d+(?:\.\d+)?", joined(right))
         return float(values[-1]) if values else default
 
-    sheet = bool(re.search(r"\bSheet\b", text, re.I))
+    category_row = joined([t for t in card if abs(t.center[1]-role_text.center[1]) < .025])
+    category = next((kind for kind in CATEGORY_PRIORITY
+                     if re.search(kind+r'\b', category_row, re.I)), '')
+    if not category and re.search(r'Skill\s*Chip', category_row, re.I):
+        category = 'Item'
+    if not category and re.search(r'[Iil1|][Il1|]?tem\b', category_row):
+        category = 'Item'  # Actual OCR read the category icon + Item as Iltem.
+    sheet = category == 'Sheet'
     cost = stat(r"\bCOST\b", None)
     # Skill chips and accessories have no COST row in the recorded tooltips.
-    if cost is None and re.search(r"Skill Chip|Accessory", text, re.I):
+    if cost is None and category in {'Accessory', 'Relic', 'Item'}:
         cost = 0
     return Item(name, role, sheet, int(cost) if cost is not None else None,
-                stat(r"\bDMG\b", 0), stat(r"Attack Interval", 1), text)
+                stat(r"\bDMG\b", 0), stat(r"Attack Interval", 1), text, category)

@@ -10,7 +10,7 @@ from src.task.cubie_wars.model import (
     Screen, Text, classify, joined, next_stage, parse_item, spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
-    capacity_tag, green_check, placement_points, recipe_available,
+    capacity_tag, green_check, number_frame, placement_points, recipe_available, recommended_item,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -237,7 +237,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def number(self, region, fraction=False):
         pattern = r"(\d+)\s*/\s*(\d+)" if fraction else r"\d+"
         for attempt in range(4):
-            boxes = self.ocr(*region, threshold=.65)
+            boxes = self.ocr(*region, threshold=.65, frame_processor=number_frame)
             text = " ".join(b.name for b in boxes)
             match = re.search(pattern, text)
             if match:
@@ -278,14 +278,17 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 used, maximum = self.number((.139, .103, .178, .139), fraction=True)
                 free = len(placement_points(self.frame))
                 offers = []
+                recommended = [recommended_item(self.frame, (x, .392 if index < 3 else .64))
+                               for index, (x, _) in enumerate(self.SHOP_SLOTS)]
                 for index, (x, y) in enumerate(self.SHOP_SLOTS):
-                    if index in skipped:
+                    if index in skipped or not recommended[index]:
                         continue
                     self.move_relative(x, y)
                     self.sleep(.4)
                     self.next_frame()
                     price_y = .392 if index < 3 else .64
-                    price_boxes = self.ocr(x - .012, price_y - .021, x + .006, price_y + .02, threshold=.6)
+                    price_boxes = self.ocr(x - .015, price_y - .021, x + .007, price_y + .02,
+                                           threshold=.65, frame_processor=number_frame)
                     price_text = " ".join(b.name for b in price_boxes)
                     price_match = re.fullmatch(r"\s*(\d{1,2})\s*", price_text)
                     if not price_match:
@@ -298,9 +301,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                                     b.width / self.width, b.height / self.height) for b in tooltip_boxes]
                     item = parse_item(tooltip)
                     if item:
-                        score = item.score(self._role, maximum - used, free, price)
-                        if score > 0:
-                            offers.append((score, index, item))
+                        rank = item.purchase_rank(self._role, maximum - used, free, price)
+                        if rank is not None:
+                            offers.append((rank, index, item))
                 if not offers:
                     break
                 _, index, item = max(offers, key=lambda offer: offer[0])
@@ -326,12 +329,15 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.sleep(.25)
                 self.next_frame()
                 before = self.coins()
-                if before < 3:
+                refresh_price = self.number((.899, .621, .921, .658))
+                if not 0 < refresh_price <= 20:
+                    self.stop_with_evidence('Cubie Wars shop refresh price is invalid')
+                if before < refresh_price:
                     break
                 self.click_relative(.895, .574, after_sleep=.5)
                 self.next_frame()
-                if self.coins() >= before:
-                    self.stop_with_evidence("Shop refresh did not consume a coin")
+                if self.coins() != before - refresh_price:
+                    self.stop_with_evidence("Shop refresh coin change did not match its price")
         return True
 
     def handle_spotlight(self):
