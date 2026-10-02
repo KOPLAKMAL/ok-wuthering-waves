@@ -423,6 +423,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                         skipped.clear()
                 elif after != before:
                     self.stop_with_evidence("Cancelled drag changed coins; check the Storage Box before continuing")
+                elif self._placement_reason == 'not_picked_up':
+                    self.stop_with_evidence(f"Could not pick up {item.name} after three attempts; "
+                                            "stopped before spending coins on refresh")
                 elif self._placement_reason != 'no_space':
                     self.stop_with_evidence(f"Could not verify a legal placement for {item.name}; "
                                             "stopped before spending coins on refresh")
@@ -460,13 +463,52 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.log_info(f"Cubie Wars: clicking tutorial highlight at {target}")
         self.click_relative(*target, after_sleep=.7)
 
+    def drag_active(self):
+        # Green hover cards are not placement ghosts. Rotate appears only
+        # beside an item actually held by the cursor, even on a red preview.
+        return bool(self.ocr(.05, .1, .97, .96, match=re.compile(r'^Rotate$', re.I),
+                             threshold=.65, frame=self.frame, target_height=1080))
+
+    def pick_up(self, source):
+        for attempt in range(3):
+            active = False
+            try:
+                self.move_relative(*source)
+                self.sleep(.35)
+                self.mouse_down(round(source[0] * self.width), round(source[1] * self.height))
+                self.sleep(.25)
+                # Move into empty Storage to expose the held-item control.
+                # A missed press only moves the cursor here, hiding its tooltip.
+                self.move_relative(.5, .78)
+                consecutive = 0
+                for _ in range(4):
+                    self.sleep(.2)
+                    self.next_frame()
+                    consecutive = consecutive + 1 if self.drag_active() else 0
+                    if consecutive >= 2:
+                        active = True
+                        return True
+            finally:
+                if not active:
+                    try:
+                        self.move_relative(*source)
+                    finally:
+                        self.mouse_up()
+            self.log_info(f"Cubie Wars: item did not lift on pickup attempt {attempt + 1}")
+            self.move_relative(.55, .78)
+            self.sleep(.3)
+        self.screenshot('cubie-wars-pickup-failed')
+        return False
+
     def drag_to_book(self, source, baseline, sheet=False):
         self._placement_reason = 'unknown'
         points = placement_points(baseline, sheet)
         if not points:
             self._placement_reason = 'no_space'
             return False
-        self.mouse_down(round(source[0] * self.width), round(source[1] * self.height))
+        if not self.pick_up(source):
+            self._placement_reason = 'not_picked_up'
+            return False
         placed = False
         best_preview = None
         best_counts = (-1, 0)
@@ -497,7 +539,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                             if (green, -red) > best_counts:
                                 best_counts = (green, -red)
                                 best_preview = self.frame.copy()
-                            consecutive = consecutive + 1 if valid_preview(baseline, self.frame) else 0
+                            legal = valid_preview(baseline, self.frame) and self.drag_active()
+                            consecutive = consecutive + 1 if legal else 0
                             if consecutive >= 2:
                                 placed = True
                                 break

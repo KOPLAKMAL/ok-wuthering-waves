@@ -210,6 +210,13 @@ def make_task():
     task.mouse_down = MagicMock()
     task.mouse_up = MagicMock()
     task.send_key = MagicMock()
+    # Placement tests below start after a verified pickup; test pickup itself
+    # separately with failed presses, stale captures, and actual OCR fixtures.
+    def picked_up(source):
+        task.mouse_down(round(source[0] * task.width), round(source[1] * task.height))
+        return True
+    task.pick_up = MagicMock(side_effect=picked_up)
+    task.drag_active = MagicMock(return_value=True)
     return task
 
 
@@ -267,6 +274,81 @@ def test_failed_drag_returns_to_source_rotates_with_r_and_releases():
     task.move_relative.assert_called_with(.636, .278)
     task.mouse_up.assert_called_once()
     assert task._placement_reason == 'unknown'
+
+
+@pytest.mark.parametrize('case', json.loads((FIXTURES / 'pickup_ocr.json').read_text()),
+                         ids=lambda case: case['name'])
+def test_held_item_marker_from_actual_native_and_recording_ocr(case):
+    task = make_task()
+    del task.drag_active
+    suffix = '.png' if case['name'].startswith('live_') else '.jpg'
+    task.executor.frame = cv2.imread(str(FIXTURES / (case['name'] + suffix)))
+
+    def replay_ocr(*args, **kwargs):
+        assert args == (.05, .1, .97, .96)
+        assert kwargs['frame'] is task.frame
+        assert kwargs['target_height'] == 1080
+        return [SimpleNamespace(name=t['name']) for t in case['texts']
+                if t['confidence'] >= kwargs['threshold'] and kwargs['match'].fullmatch(t['name'])]
+
+    task.ocr = MagicMock(side_effect=replay_ocr)
+    assert task.drag_active() is case['held']
+
+
+def test_pickup_retries_missed_press_then_keeps_mouse_down_on_two_held_frames():
+    task = make_task()
+    del task.pick_up
+    task.drag_active.side_effect = [False] * 4 + [False, True, True]
+    source = task.SHOP_SLOTS[3]
+    assert task.pick_up(source)
+    assert task.mouse_down.call_count == 2
+    task.mouse_up.assert_called_once()
+    assert task.next_frame.call_count == 7
+    assert [c.args for c in task.move_relative.call_args_list] == [
+        source, (.5, .78), source, (.55, .78), source, (.5, .78)]
+    task.send_key.assert_not_called()
+
+
+def test_three_missed_pickups_do_not_search_or_report_a_purchase():
+    task = make_task()
+    del task.pick_up
+    task.drag_active.return_value = False
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]), \
+            patch('src.task.CubieWarsTask.valid_preview') as preview:
+        assert not task.drag_to_book(task.SHOP_SLOTS[3], frame('shop'))
+    assert task._placement_reason == 'not_picked_up'
+    assert task.mouse_down.call_count == task.mouse_up.call_count == 3
+    assert task.next_frame.call_count == 12
+    preview.assert_not_called()
+    task.send_key.assert_not_called()
+    task.screenshot.assert_called_once_with('cubie-wars-pickup-failed')
+
+
+def test_interrupted_pickup_always_returns_to_source_and_releases():
+    task = make_task()
+    del task.pick_up
+    task.next_frame.side_effect = RuntimeError('Stopped')
+    with pytest.raises(RuntimeError, match='Stopped'):
+        task.pick_up(task.SHOP_SLOTS[3])
+    task.mouse_up.assert_called_once()
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[3])
+
+
+def test_green_hover_card_cannot_confirm_placement_after_drag_is_lost():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
+    missed = cv2.imread(str(FIXTURES / 'live_pickup_missed.png'))
+    # Reproduce the old false positive from the actual failure capture.
+    assert valid_preview(before, missed)
+    task.executor.frame = missed
+    task.drag_active.return_value = False
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):
+        assert not task.drag_to_book(task.SHOP_SLOTS[3], before)
+    assert task._placement_reason == 'unknown'
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[3])
+    task.mouse_up.assert_called_once()
 
 
 def test_stop_during_drag_still_releases_mouse():
@@ -993,7 +1075,9 @@ def test_shop_attempts_recommended_weapons_before_sheets_and_accessories():
     assert [call.args[0] for call in task.drag_to_book.call_args_list] == list(task.SHOP_SLOTS[:3])
 
 
-def test_unreadable_placement_stops_before_rerolling_recommended_item():
+@pytest.mark.parametrize('reason,message', [('unknown', 'legal placement'),
+                                           ('not_picked_up', 'after three attempts')])
+def test_unreadable_placement_stops_before_rerolling_recommended_item(reason, message):
     task = make_task()
     task.executor.frame = frame('live_shop')
     task.observe = MagicMock(return_value=Screen.SHOP)
@@ -1004,9 +1088,10 @@ def test_unreadable_placement_stops_before_rerolling_recommended_item():
     task.shop_item = MagicMock(return_value=Item('Crystal', 'Adventurer', False, 0, 0, 1, '', 'Accessory'))
     task.scan_recommendations = MagicMock(return_value=[True, False, False, False, False])
     task.drag_to_book = MagicMock(return_value=False)
+    task._placement_reason = reason
     task.screenshot = MagicMock()
     task.click_relative = MagicMock()
-    with pytest.raises(RuntimeError, match='legal placement'):
+    with pytest.raises(RuntimeError, match=message):
         task.prepare_round()
     task.click_relative.assert_not_called()
 

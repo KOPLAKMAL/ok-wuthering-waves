@@ -1,0 +1,308 @@
+[
+  {
+    "name": "live_pickup_missed",
+    "held": false,
+    "texts": [
+      {
+        "name": "3/7",
+        "confidence": 0.9478850364685059
+      },
+      {
+        "name": "2",
+        "confidence": 0.7079735994338989
+      },
+      {
+        "name": "Empty Sheet",
+        "confidence": 0.9803076386451721
+      },
+      {
+        "name": "uick",
+        "confidence": 0.9850490689277649
+      },
+      {
+        "name": "Store",
+        "confidence": 0.8324638605117798
+      },
+      {
+        "name": "9",
+        "confidence": 0.6256117820739746
+      },
+      {
+        "name": "thesis",
+        "confidence": 0.9922066330909729
+      },
+      {
+        "name": "Adventurer",
+        "confidence": 0.9904534220695496
+      },
+      {
+        "name": ":Sheet",
+        "confidence": 0.8656633496284485
+      },
+      {
+        "name": "A Sheet used to hold Items.",
+        "confidence": 0.9824512004852295
+      },
+      {
+        "name": "3",
+        "confidence": 0.9888168573379517
+      },
+      {
+        "name": "\u00a912",
+        "confidence": 0.7072064280509949
+      },
+      {
+        "name": "++",
+        "confidence": 0.792651891708374
+      },
+      {
+        "name": "1",
+        "confidence": 0.9679543375968933
+      },
+      {
+        "name": "1",
+        "confidence": 0.9291406869888306
+      },
+      {
+        "name": "tio",
+        "confidence": 0.8818769454956055
+      },
+      {
+        "name": "Star",
+        "confidence": 0.9095246195793152
+      },
+      {
+        "name": "Storage Box",
+        "confidence": 0.9718576073646545
+      },
+      {
+        "name": "HP: 140",
+        "confidence": 0.9398373961448669
+      },
+      {
+        "name": "1/4313",
+        "confidence": 0.8643700480461121
+      }
+    ]
+  },
+  {
+    "name": "live_green_crystal",
+    "held": true,
+    "texts": [
+      {
+        "name": "3/6",
+        "confidence": 0.9169813990592957
+      },
+      {
+        "name": "2",
+        "confidence": 0.6841390132904053
+      },
+      {
+        "name": "Round 1 - Store",
+        "confidence": 0.9495983123779297
+      },
+      {
+        "name": "5",
+        "confidence": 0.887281596660614
+      },
+      {
+        "name": "Rotate",
+        "confidence": 0.998593270778656
+      },
+      {
+        "name": "2",
+        "confidence": 0.8115631937980652
+      },
+      {
+        "name": "4",
+        "confidence": 0.9964452385902405
+      },
+      {
+        "name": "\u00a96",
+        "confidence": 0.6187079548835754
+      },
+      {
+        "name": "1",
+        "confidence": 0.9363742470741272
+      },
+      {
+        "name": "Star",
+        "confidence": 0.7374327182769775
+      },
+      {
+        "name": "Storage Box",
+        "confidence": 0.9873375296592712
+      },
+      {
+        "name": "HP:100",
+        "confidence": 0.9898219704627991
+      },
+      {
+        "name": "0/4|3/3",
+        "confidence": 0.9049988985061646
+      }
+    ]
+  },
+  {
+    "name": "valid_ghost",
+    "held": true,
+    "texts": [
+      {
+        "name": "3/6",
+        "confidence": 0.9746220111846924
+      },
+      {
+        "name": "Round 1-Store",
+        "confidence": 0.964840292930603
+      },
+      {
+        "name": "G",
+        "confidence": 0.8767387270927429
+      },
+      {
+        "name": "10",
+        "confidence": 0.9971770644187927
+      },
+      {
+        "name": "3",
+        "confidence": 0.970770537853241
+      },
+      {
+        "name": "6",
+        "confidence": 0.9985072016716003
+      },
+      {
+        "name": "Rotate",
+        "confidence": 0.9972590804100037
+      },
+      {
+        "name": "6",
+        "confidence": 0.997918426990509
+      },
+      {
+        "name": "4",
+        "confidence": 0.7454376816749573
+      },
+      {
+        "name": "1",
+        "confidence": 0.6331462264060974
+      },
+      {
+        "name": "Start",
+        "confidence": 0.9869928359985352
+      },
+      {
+        "name": "Storage Box",
+        "confidence": 0.9708227515220642
+      },
+      {
+        "name": "HP:100",
+        "confidence": 0.9857251644134521
+      },
+      {
+        "name": "0/83/3",
+        "confidence": 0.938462495803833
+      }
+    ]
+  },
+  {
+    "name": "invalid_ghost",
+    "held": true,
+    "texts": [
+      {
+        "name": "9/9",
+        "confidence": 0.9888065457344055
+      },
+      {
+        "name": "Round 4-Store",
+        "confidence": 0.9775063991546631
+      },
+      {
+        "name": "G",
+        "confidence": 0.7168545126914978
+      },
+      {
+        "name": "4",
+        "confidence": 0.9936663508415222
+      },
+      {
+        "name": "6",
+        "confidence": 0.9953688979148865
+      },
+      {
+        "name": "Rotate",
+        "confidence": 0.9952486157417297
+      },
+      {
+        "name": "1",
+        "confidence": 0.9788561463356018
+      },
+      {
+        "name": "Start",
+        "confidence": 0.9846895337104797
+      },
+      {
+        "name": "Storage Box",
+        "confidence": 0.9731839895248413
+      },
+      {
+        "name": "HP:290",
+        "confidence": 0.9846591949462891
+      },
+      {
+        "name": "3/1213/3",
+        "confidence": 0.9075230360031128
+      }
+    ]
+  },
+  {
+    "name": "invalid_ghost_sword",
+    "held": true,
+    "texts": [
+      {
+        "name": "6/10",
+        "confidence": 0.9966249465942383
+      },
+      {
+        "name": "Round 4-Store",
+        "confidence": 0.9646719694137573
+      },
+      {
+        "name": "13",
+        "confidence": 0.9987152814865112
+      },
+      {
+        "name": "Rotate",
+        "confidence": 0.9972544312477112
+      },
+      {
+        "name": "vnthesize",
+        "confidence": 0.9422574639320374
+      },
+      {
+        "name": "Drag the Item here to",
+        "confidence": 0.9587479829788208
+      },
+      {
+        "name": "sell",
+        "confidence": 0.9945987462997437
+      },
+      {
+        "name": "Start",
+        "confidence": 0.984170138835907
+      },
+      {
+        "name": "Storage Box",
+        "confidence": 0.9686470627784729
+      },
+      {
+        "name": "HP:300",
+        "confidence": 0.9808858036994934
+      },
+      {
+        "name": "3/413/3",
+        "confidence": 0.8560320734977722
+      }
+    ]
+  }
+]
