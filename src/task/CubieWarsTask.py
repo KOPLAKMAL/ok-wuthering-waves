@@ -473,24 +473,35 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     if self._deadline and time.monotonic() > self._deadline:
                         self.stop_with_evidence("Cubie Wars session time limit reached during placement")
 
-                    self.move_relative(*point)
-                    consecutive = 0
-                    # WGC can return an older rendered frame after movement.
-                    # Keep the cursor still and require two legal previews.
-                    for sample in range(3):
-                        self.sleep(.2 if sample == 0 else .12)
-                        self.next_frame()
-                        green, red = preview_counts(baseline, self.frame)
-                        if (green, -red) > best_counts:
-                            best_counts = (green, -red)
-                            best_preview = self.frame.copy()
-                        consecutive = consecutive + 1 if valid_preview(baseline, self.frame) else 0
-                        if consecutive >= 2:
-                            placed = True
+                    # At the exact cell center, the dragged icon can cover the
+                    # entire colored ghost. The manual capture exposes green
+                    # with the icon shifted right/down. Reveal both edges while
+                    # staying inside the same 102-pixel cell before rotating.
+                    blocked = False
+                    for dx, dy in ((0, 0), (24 / 1920, 16 / 1080), (-24 / 1920, -16 / 1080)):
+                        if self._deadline and time.monotonic() > self._deadline:
+                            self.stop_with_evidence("Cubie Wars session time limit reached during placement")
+                        self.move_relative(point[0] + dx, point[1] + dy)
+                        consecutive = 0
+                        # Keep the cursor still and require two legal previews;
+                        # WGC can return an older frame just after movement.
+                        for sample in range(3):
+                            self.sleep(.2 if sample == 0 else .12)
+                            self.next_frame()
+                            green, red = preview_counts(baseline, self.frame)
+                            if (green, -red) > best_counts:
+                                best_counts = (green, -red)
+                                best_preview = self.frame.copy()
+                            consecutive = consecutive + 1 if valid_preview(baseline, self.frame) else 0
+                            if consecutive >= 2:
+                                placed = True
+                                break
+                        blocked = red > self.frame.shape[0] * self.frame.shape[1] * .00015
+                        if placed or blocked:
                             break
                     if placed:
                         break
-                    all_blocked &= red > self.frame.shape[0] * self.frame.shape[1] * .00015
+                    all_blocked &= blocked
                 if placed:
                     break
                 self.send_key('r')

@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import cv2
+import numpy as np
 import pytest
 
 from src.task.CubieWarsTask import CubieWarsTask, ShopInterrupted
@@ -179,6 +180,55 @@ def test_native_green_outline_and_tan_free_cell(width):
     assert (771 / 1920, 609 / 1080) not in placement_points(before)
 
 
+def occluded_crystal_frames():
+    # Board-only captures saved by the 06:07 live run, without a user ID.
+    images = []
+    for name in ('before', 'held'):
+        tile = cv2.imread(str(FIXTURES / f'live_occluded_crystal_{name}.png'))
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        image[97:821, 115:1114] = tile
+        images.append(image)
+    return images
+
+
+def test_actual_centered_crystal_covers_the_green_preview():
+    before, held = occluded_crystal_frames()
+    assert not valid_preview(before, held)
+    # The earlier manual capture exposes the outline beside the held icon.
+    assert valid_preview(before, cv2.imread(str(FIXTURES / 'live_green_crystal.png')))
+
+
+def test_drag_nudges_hidden_preview_then_releases_without_rotating():
+    task = make_task()
+    before, covered = occluded_crystal_frames()
+    visible = cv2.imread(str(FIXTURES / 'live_green_crystal.png'))
+    task.executor.frame = before
+    captures = iter([covered] * 3 + [visible] * 2)
+    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
+    target = (567 / 1920, 303 / 1080)
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[target]):
+        assert task.drag_to_book(task.SHOP_SLOTS[3], before)
+    assert [call.args for call in task.move_relative.call_args_list] == [
+        target, (target[0] + 24 / 1920, target[1] + 16 / 1080)]
+    task.send_key.assert_not_called()
+    task.mouse_up.assert_called_once()
+
+
+def test_hidden_preview_tries_both_sides_before_rotating_without_blind_drop():
+    task = make_task()
+    before, covered = occluded_crystal_frames()
+    task.executor.frame = covered
+    task.screenshot = MagicMock()
+    target = (567 / 1920, 303 / 1080)
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[target]):
+        assert not task.drag_to_book(task.SHOP_SLOTS[3], before)
+    attempts = [target, (target[0] + 24 / 1920, target[1] + 16 / 1080),
+                (target[0] - 24 / 1920, target[1] - 16 / 1080)]
+    assert [call.args for call in task.move_relative.call_args_list] == attempts * 4 + [task.SHOP_SLOTS[3]]
+    task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'unknown'
+
+
 def test_drag_releases_at_first_stable_green_without_returning_to_shop():
     task = make_task()
     before = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
@@ -208,6 +258,7 @@ def test_partial_green_with_red_collision_returns_item_and_reports_no_space():
     task.move_relative.assert_called_with(*task.SHOP_SLOTS[0])
     task.mouse_up.assert_called_once()
     assert task._placement_reason == 'no_space'
+    assert task.move_relative.call_count == 5  # Four red positions, then cancel; no nudges.
 
 
 def test_one_green_frame_does_not_drop_after_preview_disappears():
@@ -215,7 +266,7 @@ def test_one_green_frame_does_not_drop_after_preview_disappears():
     before = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
     held = cv2.imread(str(FIXTURES / 'live_green_crystal.png'))
     task.executor.frame = before
-    captures = iter([held] + [before] * 11)
+    captures = iter([held] + [before] * 35)
     task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
     task.screenshot = MagicMock()
     with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):

@@ -127,6 +127,14 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   matched the user's manual preview. Native drag and settling changes remain
   pending live validation. Tests cover a stale first frame, transient green,
   partial green plus red beyond the book, and retry after sheet expansion.
+- The 06:07 live run saved the missing evidence: its centered Crystal hides
+  the green ghost, yielding zero accepted green/red components despite being
+  held above a free cell. The manual capture exposes the ghost with the icon
+  slightly right and down. When centered previews remain unresolved, move
+  24 pixels right/16 down, then 24 left/16 up (scaled from 1920x1080), within
+  the same 102-pixel cell before rotating. Red collision previews skip these
+  offsets. Stable green is still required; nudging is pending live validation.
+  Board-only before/held captures reproduce the missed preview in tests.
 - The 05:36 run confirms real hover opened the native "Random" Crystal card.
   Its Accessory label is below Adventurer, not beside it; read either layout
   without treating "Weapons" in the description as the category. A valid
