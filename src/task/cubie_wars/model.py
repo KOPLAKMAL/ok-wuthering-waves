@@ -18,6 +18,7 @@ class Screen(Enum):
     GUIDE = "Tutorial"
     SPOTLIGHT = "Tutorial highlight"
     SHOP = "Round store"
+    ITEM_TOOLTIP = "Store item tooltip"
     MATCHING = "Matchmaking"
     COMBAT = "Combat"
     ROUND_RESULT = "Round result"
@@ -82,10 +83,20 @@ def classify(texts):
         return Screen.CUBE
     if has(r"Stage Objective", (.7, .2, 1, .65)) and has(r"Stage\s*[1-6]", (0, .12, .2, .9)):
         return Screen.STAGES
-    if has(r"Drag the Item here to|View Synthesisinfo", (.6, .25, .98, .8)):
+    if has(r"Drag the Item here to", (.6, .25, .98, .8)):
         return Screen.UNKNOWN
     if has(r"Matching", (.8, .8, 1, .95)) and has(r"Storage Box", (.35, .85, .7, 1)):
         return Screen.MATCHING
+    if (has(r"Storage Box", (.35, .85, .7, 1))
+            and has(r"Stage Details", (0, 0, .2, .09))
+            and has(r"^\d+\s*/\s*\d+$", (.13, .09, .19, .15))):
+        item = parse_item(texts)
+        if item and item.category:
+            # Hover cards can hide Round N - Store. Keep this separate from
+            # the uncovered Store so no purchase/start uses an obscured UI.
+            return Screen.ITEM_TOOLTIP
+    if has(r"View Synthesisinfo", (.4, .25, .98, .8)):
+        return Screen.UNKNOWN
     if has(r"Storage Box", (.35, .85, .7, 1)) and has(r"Round\s*\d+.*Store", (.55, .09, .8, .2)):
         return Screen.SHOP
     if has(r"HP", (0, 0, .4, .1)) and has(r"HP", (.58, 0, .87, .1)) and has(r"Round\s*\d+", (.42, 0, .6, .1)):
@@ -193,6 +204,14 @@ def parse_item(texts):
         category = 'Item'
     if not category and re.search(r'[Iil1|][Il1|]?tem\b', category_row):
         category = 'Item'  # Actual OCR read the category icon + Item as Iltem.
+    if not category:
+        # Native Accessory cards stack the category below the affinity pill.
+        # Accept only a category label in that header column, not a mention
+        # of Weapons in the description ("Random" Crystal is an Accessory).
+        below = [t for t in card if .025 <= t.center[1] - role_text.center[1] <= .065
+                 and abs(t.x - role_text.x) < .06]
+        category = next((kind for t in below for kind in CATEGORY_PRIORITY
+                         if re.fullmatch(r'(?:[^\w]|[XIl1|])*' + kind, t.name.strip(), re.I)), '')
     sheet = category == 'Sheet'
     cost = stat(r"\bCOST\b", None)
     # Skill chips and accessories have no COST row in the recorded tooltips.

@@ -21,6 +21,7 @@ from src.task.cubie_wars.vision import (
 
 FIXTURES = Path(__file__).parent / 'images' / 'cubie_wars'
 CASES = json.loads((FIXTURES / 'ocr.json').read_text(encoding='utf-8'))
+LIVE_HOVER = json.loads((FIXTURES / 'live_hover_ocr.json').read_text(encoding='utf-8'))
 
 
 def frame(name):
@@ -466,6 +467,110 @@ def test_live_middle_thumb_is_detected_even_without_item_tooltip():
     image = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
     assert [recommended_item(image, (x, .392 if index < 3 else .64))
             for index, (x, _) in enumerate(CubieWarsTask.SHOP_SLOTS)] == [False, True, False, False, False]
+
+
+@pytest.mark.parametrize('source', ['texts', 'tooltip_texts'])
+def test_live_crystal_category_below_affinity_is_accessory_not_weapon(source):
+    item = parse_item([Text(**t) for t in LIVE_HOVER[source]])
+    assert item.name == '"Random"Crystal'
+    assert item.role == 'Adventurer'
+    assert item.category == 'Accessory' and item.cost == 0
+    assert item.purchase_rank('Adventurer', 3, 3, 1) is not None
+
+
+def test_live_hover_remains_a_tooltip_in_the_store_when_round_label_is_hidden():
+    texts = [Text(**t) for t in LIVE_HOVER['texts']]
+    assert not any(re.search(r'Round\s*\d+.*Store', t.name, re.I) for t in texts)
+    assert classify(texts) == Screen.ITEM_TOOLTIP
+    # The card alone does not establish a Store screen elsewhere.
+    assert classify([Text(**t) for t in LIVE_HOVER['tooltip_texts']]) == Screen.UNKNOWN
+
+
+def test_live_crystal_targeted_ocr_is_accepted_on_first_hover_read():
+    task = make_task()
+    task.executor.method.width, task.executor.method.height = 1920, 1080
+    task.ocr = MagicMock(return_value=[SimpleNamespace(
+        name=t['name'], x=t['x']*1920, y=t['y']*1080,
+        width=t['width']*1920, height=t['height']*1080)
+        for t in LIVE_HOVER['tooltip_texts']])
+    task.require_shop = MagicMock()
+    assert task.shop_item(1).category == 'Accessory'
+    task.ocr.assert_called_once()
+    task.require_shop.assert_not_called()
+
+
+def test_live_recommended_crystal_reaches_purchase_before_refresh():
+    task = make_task()
+    task.executor.method.width, task.executor.method.height = 1920, 1080
+    task.config['Refreshes per round'] = 0
+    clear = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
+    hover = cv2.imread(str(FIXTURES / 'live_hover_crystal.png'))
+    task.executor.frame = clear
+    task.synthesize = MagicMock()
+    task.coins = MagicMock(side_effect=[5, 5, 4, 4])
+    task.number = MagicMock(return_value=(3, 6))
+
+    def move(x, y):
+        task.executor.frame = hover if (x, y) == task.SHOP_SLOTS[1] else clear
+
+    def observe():
+        task._texts = [Text(**t) for t in LIVE_HOVER['texts']] if task.frame is hover else [
+            Text('Stage Details', .03, .04), Text('Round 1 - Store', .6, .1),
+            Text('Storage Box', .44, .9), Text('3/6', .14, .1)]
+        return classify(task._texts)
+
+    boxes = [SimpleNamespace(name=t['name'], x=t['x']*1920, y=t['y']*1080,
+                             width=t['width']*1920, height=t['height']*1080)
+             for t in LIVE_HOVER['tooltip_texts']]
+    task.move_relative.side_effect = move
+    task.observe = MagicMock(side_effect=observe)
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
+                         boxes if args == (.2, .075, .68, .7) else [SimpleNamespace(name='1')])
+    task.drag_to_book = MagicMock(return_value=True)
+    task.click_relative = MagicMock()
+    assert task.prepare_round() is True
+    task.drag_to_book.assert_called_once()
+    assert task.drag_to_book.call_args.args[0] == task.SHOP_SLOTS[1]
+    task.click_relative.assert_not_called()
+
+
+def test_active_tooltip_is_cleared_before_round_preparation_or_start():
+    task = make_task()
+    screens = iter([Screen.ITEM_TOOLTIP, Screen.SHOP, Screen.SHOP, Screen.STAGE_RESULT])
+
+    def observe():
+        screen = next(screens)
+        task._texts = [Text(**t) for t in LIVE_HOVER['texts']] if screen == Screen.ITEM_TOOLTIP else [
+            Text('Round 1 - Store', .6, .1)]
+        return screen
+
+    task.observe = MagicMock(side_effect=observe)
+    task.prepare_round = MagicMock(return_value=True)
+    task.start_round = MagicMock()
+    task.click_text = MagicMock()
+    task.play_stage('Story')
+    task.move_relative.assert_called_once_with(.55, .78)
+    task.prepare_round.assert_called_once()
+    task.start_round.assert_called_once()
+
+
+@pytest.mark.parametrize('allow', [True, False])
+def test_tooltip_is_allowed_only_while_reading_an_offer(allow):
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.ITEM_TOOLTIP)
+    task.screenshot = MagicMock()
+    if allow:
+        task.require_shop(allow_tooltip=True)
+    else:
+        with pytest.raises(RuntimeError, match='Store changed'):
+            task.require_shop()
+
+
+def test_descriptive_weapon_mention_below_affinity_is_not_a_category():
+    texts = [Text('Crystal', .43, .10), Text('Adventurer', .45, .16),
+             Text('Used to synthesize Rare and Epic Weapons.', .43, .20)]
+    item = parse_item(texts)
+    assert item.category == '' and item.cost is None
 
 
 def test_tutorial_during_hover_interrupts_before_purchase():

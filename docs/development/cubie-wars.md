@@ -114,6 +114,12 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   offer's price before hovering and retry tooltip OCR for four fresh frames;
   tutorial interruptions return control to their handler. Live purchase and
   drag still need validation with this adapter.
+- The 05:36 run confirms real hover opened the native "Random" Crystal card.
+  Its Accessory label is below Adventurer, not beside it; read either layout
+  without treating "Weapons" in the description as the category. A valid
+  tooltip with the Store's capacity, Stage Details, and Storage Box is a
+  separate item-tooltip state, even when it hides the round title. Resume
+  clears that card before reading the round or taking shop actions.
 - Try available yellow Synthesize buttons, bounded shop refreshes, and 2x
   combat speed. Adventure currently selects Lynae; Story uses its fixed Cubie.
 

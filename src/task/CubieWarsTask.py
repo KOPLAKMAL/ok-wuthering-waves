@@ -72,7 +72,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
         resume_story = self.config.get("Mode") == "Resume Story stage"
         if resume_story:
-            if screen not in {Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.MATCHING,
+            if screen not in {Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.MATCHING,
                               Screen.COMBAT, Screen.ROUND_RESULT, Screen.STAGE_RESULT, Screen.EVENT}:
                 self.stop_with_evidence("Open the active Story stage before choosing Resume Story stage")
         elif screen != Screen.HUB:
@@ -205,6 +205,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     "Adventurer", "Rapier", "Traumatizer", "Heavy Hitter", "Gold Hunter"))
                     if self.text(name, (.65, .08, 1, .25))), "Adventurer")
                 self.click_text(r"^G[o0C]$", (.65, .8, 1, 1))
+            elif screen == Screen.ITEM_TOOLTIP:
+                self.move_relative(.55, .78)
+                self.sleep(.3)
             elif screen == Screen.SHOP:
                 round_text = self.text(r"Round\s*\d+.*Store", (.55, .09, .8, .2)).name
                 if last_shop == round_text:
@@ -293,11 +296,11 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             if self.observe() != Screen.COMBAT:
                 return
 
-    def require_shop(self):
+    def require_shop(self, allow_tooltip=False):
         screen = self.observe()
         if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
             raise ShopInterrupted()
-        if screen != Screen.SHOP:
+        if screen != Screen.SHOP and not (allow_tooltip and screen == Screen.ITEM_TOOLTIP):
             self.stop_with_evidence("Cubie Wars Store changed before a shop action")
 
     def scan_recommendations(self):
@@ -340,7 +343,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             item = parse_item(tooltip)
             if item and item.category:
                 return item
-            self.require_shop()
+            self.require_shop(allow_tooltip=True)
         self.stop_with_evidence(f"Recommended slot {index + 1} tooltip is unreadable; "
                                 "stopped before spending coins on refresh")
 

@@ -148,7 +148,7 @@
   },
   {
     "name": "shop_tooltip",
-    "expected": "UNKNOWN",
+    "expected": "ITEM_TOOLTIP",
     "source_frame": "tutorial-and-ending/frame_000150.00.jpg",
     "texts": [
       {
