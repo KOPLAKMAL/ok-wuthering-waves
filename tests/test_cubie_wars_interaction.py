@@ -20,11 +20,12 @@ def windows():
             patch('win32gui.PostMessage') as post, \
             patch('win32gui.ClientToScreen', side_effect=lambda handle, point: point), \
             patch('win32gui.ScreenToClient', side_effect=lambda handle, point: point):
-        yield capture, window, cursor.return_value, post
+        with patch('src.task.cubie_wars.interaction.pydirectinput.mouseUp') as release:
+            yield capture, window, cursor.return_value, post, release
 
 
 def test_hover_moves_real_cursor_then_sends_window_position(windows):
-    capture, window, cursor, post = windows
+    capture, window, cursor, post, release = windows
     interaction = CubieWarsInteraction(capture, window)
     interaction.move(1471, 300)
     cursor.move.assert_called_once_with(1471, 300)
@@ -32,21 +33,24 @@ def test_hover_moves_real_cursor_then_sends_window_position(windows):
 
 
 def test_drag_keeps_left_button_and_releases_at_drop_not_origin(windows):
-    capture, window, cursor, post = windows
+    capture, window, cursor, post, release = windows
     interaction = CubieWarsInteraction(capture, window)
     interaction.mouse_down(1471, 300)
+    cursor.mouse_down.assert_called_once_with(1471, 300, name=None, key='left')
+    post.reset_mock()
     interaction.move(780, 430)
-    assert post.call_args.args == (17, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON,
-                                  win32api.MAKELONG(780, 430))
+    cursor.move.assert_called_with(780, 430)
+    post.assert_not_called()
     # Even a lost focus must not prevent the button-up cleanup.
     window.is_foreground.return_value = False
     interaction.mouse_up()
-    assert post.call_args.args == (17, win32con.WM_LBUTTONUP, 0, win32api.MAKELONG(780, 430))
+    release.assert_called_once_with(button='left')
+    post.assert_not_called()
     assert interaction.held_button == 0
 
 
 def test_unavailable_foreground_stops_before_mouse_movement(windows):
-    capture, window, cursor, post = windows
+    capture, window, cursor, post, release = windows
     window.is_foreground.return_value = False
     with pytest.raises(RuntimeError, match='foreground'):
         CubieWarsInteraction(capture, window).move(1471, 300)
@@ -56,7 +60,7 @@ def test_unavailable_foreground_stops_before_mouse_movement(windows):
 
 
 def test_backend_restores_and_releases_when_task_is_stopped(windows):
-    capture, window, cursor, post = windows
+    capture, window, cursor, post, release = windows
     original = PostMessageInteraction(capture, window)
     # Exercise the real read-only executor.interaction property.
     executor = object.__new__(TaskExecutor)
@@ -68,7 +72,7 @@ def test_backend_restores_and_releases_when_task_is_stopped(windows):
             executor.interaction.move(780, 430)
             raise RuntimeError('Stopped')
     assert executor.interaction is original
-    assert post.call_args.args == (17, win32con.WM_LBUTTONUP, 0, win32api.MAKELONG(780, 430))
+    release.assert_called_once_with(button='left')
 
 
 def test_browser_backend_is_preserved():

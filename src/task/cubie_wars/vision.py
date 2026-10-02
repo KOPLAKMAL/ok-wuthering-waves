@@ -129,9 +129,10 @@ def empty_sheet_cell(frame, point):
         return False
     hsv = cv2.cvtColor(tile, cv2.COLOR_BGR2HSV)
     purple = cv2.inRange(hsv, (115, 30, 100), (160, 150, 255)) > 0
+    tan = cv2.inRange(hsv, (10, 20, 100), (40, 170, 255)) > 0
     gray = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 45, 100)
-    return np.mean(purple) > .9 and np.mean(edges > 0) < .015
+    return np.mean(purple | tan) > .9 and np.mean(edges > 0) < .015
 
 
 def placement_points(frame, sheet=False):

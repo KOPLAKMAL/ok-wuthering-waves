@@ -12,7 +12,7 @@ from src.task.cubie_wars.model import (
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, crop, green_check, number_frame, placement_points, possible_recommendation,
-    recipe_available, recommended_item,
+    preview_counts, recipe_available, recommended_item,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -51,6 +51,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._deadline = 0
         self._spotlight_attempts = {}
         self._shop_scans_saved = 0
+        self._placement_scans_saved = 0
+        self._placement_reason = 'unknown'
 
     def validate_config(self, key, value):
         limits = {"Stage attempts": (1, 10), "Refreshes per round": (0, 20), "Session minutes": (1, 360)}
@@ -63,6 +65,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._deadline = time.monotonic() + self.config.get("Session minutes", 180) * 60
         self._spotlight_attempts = {}
         self._shop_scans_saved = 0
+        self._placement_scans_saved = 0
         screen = self.observe()
         if self.config.get("Mode") == "Inspect screen":
             self.screenshot("cubie-wars-inspection")
@@ -410,8 +413,16 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                         self.stop_with_evidence("Item placement was not confirmed by a coin decrease")
                     self.log_info(f"Cubie Wars: placed {item.name}, spent {before - after} coins")
                     self.synthesize()
+                    if item.sheet:
+                        # Expansion can make a previously rejected weapon fit.
+                        skipped.clear()
                 elif after != before:
                     self.stop_with_evidence("Cancelled drag changed coins; check the Storage Box before continuing")
+                elif self._placement_reason != 'no_space':
+                    self.stop_with_evidence(f"Could not verify a legal placement for {item.name}; "
+                                            "stopped before spending coins on refresh")
+                else:
+                    self.log_info(f"Cubie Wars: {item.name} does not fit; checking other recommended items")
             if refresh < self.config.get("Refreshes per round", 4):
                 self.move_relative(.55, .78)
                 self.sleep(.25)
@@ -445,11 +456,16 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.click_relative(*target, after_sleep=.7)
 
     def drag_to_book(self, source, baseline, sheet=False):
+        self._placement_reason = 'unknown'
         points = placement_points(baseline, sheet)
         if not points:
+            self._placement_reason = 'no_space'
             return False
         self.mouse_down(round(source[0] * self.width), round(source[1] * self.height))
         placed = False
+        best_preview = None
+        best_counts = (-1, 0)
+        all_blocked = True
         try:
             self.sleep(.15)
             for rotation in range(4):
@@ -458,20 +474,47 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                         self.stop_with_evidence("Cubie Wars session time limit reached during placement")
 
                     self.move_relative(*point)
-                    self.sleep(.12)
-                    self.next_frame()
-                    if valid_preview(baseline, self.frame):
-                        placed = True
-                        return True
+                    consecutive = 0
+                    # WGC can return an older rendered frame after movement.
+                    # Keep the cursor still and require two legal previews.
+                    for sample in range(3):
+                        self.sleep(.2 if sample == 0 else .12)
+                        self.next_frame()
+                        green, red = preview_counts(baseline, self.frame)
+                        if (green, -red) > best_counts:
+                            best_counts = (green, -red)
+                            best_preview = self.frame.copy()
+                        consecutive = consecutive + 1 if valid_preview(baseline, self.frame) else 0
+                        if consecutive >= 2:
+                            placed = True
+                            break
+                    if placed:
+                        break
+                    all_blocked &= red > self.frame.shape[0] * self.frame.shape[1] * .00015
+                if placed:
+                    break
                 self.send_key('r')
                 self.sleep(.12)
-            return False
         finally:
             # Return to the shop source if no valid ghost was seen. Never drop
             # blindly, and always release even when Stop interrupts a drag.
-            if not placed:
-                self.move_relative(*source)
-            self.mouse_up()
+            try:
+                if not placed:
+                    self.move_relative(*source)
+            finally:
+                self.mouse_up()
+        if placed:
+            self._placement_reason = 'placed'
+            return True
+        self._placement_reason = 'no_space' if all_blocked else 'unknown'
+        if self._placement_scans_saved < 8:
+            self.screenshot("cubie-wars-placement-before", frame=crop(baseline, (.06, .09, .58, .76)).copy())
+            if best_preview is not None:
+                self.screenshot("cubie-wars-placement-held", frame=crop(best_preview, (.06, .09, .58, .76)).copy())
+            self.log_info(f"Cubie Wars: failed placement preview green={best_counts[0]}, "
+                          f"red={-best_counts[1]}, candidates={len(points)}, reason={self._placement_reason}")
+            self._placement_scans_saved += 1
+        return False
 
     def synthesize(self):
         for _ in range(8):

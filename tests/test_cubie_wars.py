@@ -145,6 +145,8 @@ def test_missing_stage_still_stops_instead_of_assuming_completion():
 
 def test_failed_drag_returns_to_source_rotates_with_r_and_releases():
     task = make_task()
+    task.executor.frame = frame('shop')
+    task.screenshot = MagicMock()
     with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]), \
             patch('src.task.CubieWarsTask.valid_preview', return_value=False):
         assert not task.drag_to_book((.636, .278), frame('shop'))
@@ -153,6 +155,7 @@ def test_failed_drag_returns_to_source_rotates_with_r_and_releases():
     assert all(call.args == ('r',) for call in task.send_key.call_args_list)
     task.move_relative.assert_called_with(.636, .278)
     task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'unknown'
 
 
 def test_stop_during_drag_still_releases_mouse():
@@ -161,6 +164,74 @@ def test_stop_during_drag_still_releases_mouse():
     with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):
         with pytest.raises(RuntimeError, match='Stopped'):
             task.drag_to_book((.636, .278), frame('shop'))
+    task.mouse_up.assert_called_once()
+
+
+@pytest.mark.parametrize('width', [1280, 1920, 2560])
+def test_native_green_outline_and_tan_free_cell(width):
+    before = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
+    held = cv2.imread(str(FIXTURES / 'live_green_crystal.png'))
+    size = (width, round(width * 9 / 16))
+    before, held = (cv2.resize(image, size) for image in (before, held))
+    assert valid_preview(before, held)
+    # Tan sheets also provide usable empty space; an occupied card doesn't.
+    assert (771 / 1920, 507 / 1080) in placement_points(before)
+    assert (771 / 1920, 609 / 1080) not in placement_points(before)
+
+
+def test_drag_releases_at_first_stable_green_without_returning_to_shop():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
+    held = cv2.imread(str(FIXTURES / 'live_green_crystal.png'))
+    task.executor.frame = before
+    captures = iter((before, held, held))  # One stale frame after movement.
+    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
+    target = (567 / 1920, 303 / 1080)
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[target]):
+        assert task.drag_to_book(task.SHOP_SLOTS[3], before)
+    task.move_relative.assert_called_once_with(*target)
+    task.send_key.assert_not_called()
+    task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'placed'
+
+
+def test_partial_green_with_red_collision_returns_item_and_reports_no_space():
+    task = make_task()
+    before = frame('shop')
+    held = frame('valid_ghost')
+    # The rest of a large item can extend beyond the sheet into Storage.
+    held[635:690, 500:545] = (70, 60, 220)
+    task.executor.frame = held
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):
+        assert not task.drag_to_book(task.SHOP_SLOTS[0], before)
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[0])
+    task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'no_space'
+
+
+def test_one_green_frame_does_not_drop_after_preview_disappears():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'live_recommended_middle.png'))
+    held = cv2.imread(str(FIXTURES / 'live_green_crystal.png'))
+    task.executor.frame = before
+    captures = iter([held] + [before] * 11)
+    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):
+        assert not task.drag_to_book(task.SHOP_SLOTS[3], before)
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[3])
+    task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'unknown'
+
+
+def test_cancellation_move_failure_still_releases_mouse():
+    task = make_task()
+    task.next_frame.side_effect = RuntimeError('Stopped')
+    task.move_relative.side_effect = [None, RuntimeError('Lost focus')]
+    with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):
+        with pytest.raises(RuntimeError, match='Lost focus'):
+            task.drag_to_book(task.SHOP_SLOTS[0], frame('shop'))
     task.mouse_up.assert_called_once()
 
 
@@ -730,6 +801,7 @@ def test_shop_attempts_recommended_weapons_before_sheets_and_accessories():
     task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
                          [] if args == (.2, .075, .68, .7) else [SimpleNamespace(name='3')])
     task.drag_to_book = MagicMock(return_value=False)
+    task._placement_reason = 'no_space'
     items = {x: Item(kind, 'Adventurer', kind == 'Sheet', 0, 0, 1, '', kind)
              for x, kind in zip((.636, .766, .895), ('Weapon', 'Sheet', 'Accessory'))}
     with patch('src.task.CubieWarsTask.recommended_item', side_effect=lambda image, point: point[1] == .392), \
@@ -737,6 +809,47 @@ def test_shop_attempts_recommended_weapons_before_sheets_and_accessories():
                   items[task.move_relative.call_args.args[0]]):
         assert task.prepare_round() is True
     assert [call.args[0] for call in task.drag_to_book.call_args_list] == list(task.SHOP_SLOTS[:3])
+
+
+def test_unreadable_placement_stops_before_rerolling_recommended_item():
+    task = make_task()
+    task.executor.frame = frame('live_shop')
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    task.coins = MagicMock(return_value=6)
+    task.number = MagicMock(return_value=(3, 6))
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='1')])
+    task.shop_item = MagicMock(return_value=Item('Crystal', 'Adventurer', False, 0, 0, 1, '', 'Accessory'))
+    task.scan_recommendations = MagicMock(return_value=[True, False, False, False, False])
+    task.drag_to_book = MagicMock(return_value=False)
+    task.screenshot = MagicMock()
+    task.click_relative = MagicMock()
+    with pytest.raises(RuntimeError, match='legal placement'):
+        task.prepare_round()
+    task.click_relative.assert_not_called()
+
+
+def test_sheet_purchase_retries_weapon_that_previously_did_not_fit():
+    task = make_task()
+    task.executor.frame = frame('live_shop')
+    task.config['Refreshes per round'] = 0
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.synthesize = MagicMock()
+    # Resource readings before/after each drag, including rescans after buys.
+    task.coins = MagicMock(side_effect=[6, 6, 6, 6, 6, 5, 5, 5, 4, 4])
+    task.number = MagicMock(return_value=(3, 6))
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='1')])
+    weapon = Item('Sword', 'Adventurer', False, 0, 0, 1, '', 'Weapon')
+    sheet = Item('Sheet', 'Adventurer', True, 0, 0, 1, '', 'Sheet')
+    task.shop_item = MagicMock(side_effect=lambda index: weapon if index == 0 else sheet)
+    task.scan_recommendations = MagicMock(side_effect=[
+        [True, True, False, False, False], [True, True, False, False, False],
+        [True, False, False, False, False], [False] * 5])
+    task._placement_reason = 'no_space'
+    task.drag_to_book = MagicMock(side_effect=[False, True, True])
+    assert task.prepare_round() is True
+    assert [call.args[0] for call in task.drag_to_book.call_args_list] == [
+        task.SHOP_SLOTS[0], task.SHOP_SLOTS[1], task.SHOP_SLOTS[0]]
 
 
 def test_no_thumb_skips_tooltips_and_refreshes_before_combat():
