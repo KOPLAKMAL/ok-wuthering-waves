@@ -1313,3 +1313,63 @@ msgstr "Equipo eliminado."
 
 msgid "JingRan"
 msgstr "Jingran"
+
+#: src/task/CubieWarsTask.py
+msgid "Cubie Wars (Experimental)"
+msgstr "Cubie Wars (experimental)"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Open the Cubie Wars menu first. English game UI, 16:9. Targets Astrite "
+"rewards."
+msgstr ""
+"Abre primero el menú de Cubie Wars. Juego en inglés, formato 16:9. Busca "
+"recompensas de Astrita."
+
+#: src/task/CubieWarsTask.py
+msgid "Mode"
+msgstr "Modo"
+
+#: src/task/CubieWarsTask.py
+msgid "Inspect screen"
+msgstr "Inspeccionar pantalla"
+
+#: src/task/CubieWarsTask.py
+msgid "Stage attempts"
+msgstr "Intentos por etapa"
+
+#: src/task/CubieWarsTask.py
+msgid "Refreshes per round"
+msgstr "Actualizaciones por ronda"
+
+#: src/task/CubieWarsTask.py
+msgid "Session minutes"
+msgstr "Duración en minutos"
+
+#: src/task/CubieWarsTask.py
+msgid "Astrite run"
+msgstr "Conseguir Astrita"
+
+#: src/task/CubieWarsTask.py
+msgid "Claim rewards only"
+msgstr "Solo reclamar recompensas"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Inspect screen saves a screenshot without clicking. Astrite run plays stages"
+" and claims rewards."
+msgstr ""
+"Inspeccionar pantalla guarda una captura sin hacer clic. Conseguir Astrita "
+"juega etapas y reclama recompensas."
+
+#: src/task/CubieWarsTask.py
+msgid "Stop after this many failed attempts at one stage."
+msgstr "Se detiene tras este número de intentos fallidos en una etapa."
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum shop refreshes in each round."
+msgstr "Número máximo de actualizaciones de la tienda por ronda."
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum running time before stopping."
+msgstr "Tiempo máximo de ejecución antes de detenerse."

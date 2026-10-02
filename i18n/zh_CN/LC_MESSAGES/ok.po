@@ -1438,3 +1438,59 @@ msgstr "景燃"
 
 msgid "Hsin"
 msgstr "心"
+
+#: src/task/CubieWarsTask.py
+msgid "Cubie Wars (Experimental)"
+msgstr "方块战争（实验性）"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Open the Cubie Wars menu first. English game UI, 16:9. Targets Astrite "
+"rewards."
+msgstr "请先打开方块战争菜单。游戏界面需为英语，16:9。目标为星声奖励。"
+
+#: src/task/CubieWarsTask.py
+msgid "Mode"
+msgstr "模式"
+
+#: src/task/CubieWarsTask.py
+msgid "Inspect screen"
+msgstr "检查画面"
+
+#: src/task/CubieWarsTask.py
+msgid "Stage attempts"
+msgstr "关卡尝试次数"
+
+#: src/task/CubieWarsTask.py
+msgid "Refreshes per round"
+msgstr "每轮刷新次数"
+
+#: src/task/CubieWarsTask.py
+msgid "Session minutes"
+msgstr "运行时间（分钟）"
+
+#: src/task/CubieWarsTask.py
+msgid "Astrite run"
+msgstr "获取星声"
+
+#: src/task/CubieWarsTask.py
+msgid "Claim rewards only"
+msgstr "仅领取奖励"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Inspect screen saves a screenshot without clicking. Astrite run plays stages"
+" and claims rewards."
+msgstr "检查画面只保存截图，不点击。获取星声会进行关卡并领取奖励。"
+
+#: src/task/CubieWarsTask.py
+msgid "Stop after this many failed attempts at one stage."
+msgstr "同一关卡失败达到此次数后停止。"
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum shop refreshes in each round."
+msgstr "每轮商店的最大刷新次数。"
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum running time before stopping."
+msgstr "达到此运行时长后停止。"

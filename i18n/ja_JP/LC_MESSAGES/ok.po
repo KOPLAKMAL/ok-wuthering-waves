@@ -1386,3 +1386,59 @@ msgstr "チームを削除しました。"
 
 msgid "JingRan"
 msgstr "景燃"
+
+#: src/task/CubieWarsTask.py
+msgid "Cubie Wars (Experimental)"
+msgstr "Cubie Wars（試験版）"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Open the Cubie Wars menu first. English game UI, 16:9. Targets Astrite "
+"rewards."
+msgstr "先にCubie Warsのメニューを開いてください。ゲーム表示は英語、16:9が必要です。星声報酬を目標にします。"
+
+#: src/task/CubieWarsTask.py
+msgid "Mode"
+msgstr "モード"
+
+#: src/task/CubieWarsTask.py
+msgid "Inspect screen"
+msgstr "画面を確認"
+
+#: src/task/CubieWarsTask.py
+msgid "Stage attempts"
+msgstr "ステージの試行回数"
+
+#: src/task/CubieWarsTask.py
+msgid "Refreshes per round"
+msgstr "各ラウンドの更新回数"
+
+#: src/task/CubieWarsTask.py
+msgid "Session minutes"
+msgstr "実行時間（分）"
+
+#: src/task/CubieWarsTask.py
+msgid "Astrite run"
+msgstr "星声を獲得"
+
+#: src/task/CubieWarsTask.py
+msgid "Claim rewards only"
+msgstr "報酬の受け取りのみ"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Inspect screen saves a screenshot without clicking. Astrite run plays stages"
+" and claims rewards."
+msgstr "画面を確認ではクリックせずスクリーンショットを保存します。星声を獲得ではステージをプレイして報酬を受け取ります。"
+
+#: src/task/CubieWarsTask.py
+msgid "Stop after this many failed attempts at one stage."
+msgstr "同じステージでこの回数失敗すると停止します。"
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum shop refreshes in each round."
+msgstr "各ラウンドのショップ更新回数の上限です。"
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum running time before stopping."
+msgstr "この実行時間に達すると停止します。"

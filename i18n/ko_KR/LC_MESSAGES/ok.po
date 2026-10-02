@@ -1387,3 +1387,59 @@ msgstr "팀을 삭제했습니다."
 
 msgid "JingRan"
 msgstr "경연"
+
+#: src/task/CubieWarsTask.py
+msgid "Cubie Wars (Experimental)"
+msgstr "Cubie Wars (시험 버전)"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Open the Cubie Wars menu first. English game UI, 16:9. Targets Astrite "
+"rewards."
+msgstr "먼저 Cubie Wars 메뉴를 여세요. 게임 화면은 영어, 16:9여야 합니다. 별의 소리 보상을 목표로 합니다."
+
+#: src/task/CubieWarsTask.py
+msgid "Mode"
+msgstr "모드"
+
+#: src/task/CubieWarsTask.py
+msgid "Inspect screen"
+msgstr "화면 확인"
+
+#: src/task/CubieWarsTask.py
+msgid "Stage attempts"
+msgstr "스테이지 시도 횟수"
+
+#: src/task/CubieWarsTask.py
+msgid "Refreshes per round"
+msgstr "라운드당 새로고침 횟수"
+
+#: src/task/CubieWarsTask.py
+msgid "Session minutes"
+msgstr "실행 시간(분)"
+
+#: src/task/CubieWarsTask.py
+msgid "Astrite run"
+msgstr "별의 소리 획득"
+
+#: src/task/CubieWarsTask.py
+msgid "Claim rewards only"
+msgstr "보상 받기만"
+
+#: src/task/CubieWarsTask.py
+msgid ""
+"Inspect screen saves a screenshot without clicking. Astrite run plays stages"
+" and claims rewards."
+msgstr "화면 확인은 클릭 없이 스크린샷을 저장합니다. 별의 소리 획득은 스테이지를 플레이하고 보상을 받습니다."
+
+#: src/task/CubieWarsTask.py
+msgid "Stop after this many failed attempts at one stage."
+msgstr "한 스테이지에서 이 횟수만큼 실패하면 중지합니다."
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum shop refreshes in each round."
+msgstr "라운드당 상점 새로고침 횟수의 상한입니다."
+
+#: src/task/CubieWarsTask.py
+msgid "Maximum running time before stopping."
+msgstr "이 실행 시간에 도달하면 중지합니다."
