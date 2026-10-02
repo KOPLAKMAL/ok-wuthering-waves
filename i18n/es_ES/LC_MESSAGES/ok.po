@@ -1373,3 +1373,7 @@ msgstr "Número máximo de actualizaciones de la tienda por ronda."
 #: src/task/CubieWarsTask.py
 msgid "Maximum running time before stopping."
 msgstr "Tiempo máximo de ejecución antes de detenerse."
+
+#: src/task/CubieWarsTask.py
+msgid "Resume Story stage"
+msgstr "Reanudar fase de Historia"

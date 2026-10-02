@@ -1442,3 +1442,7 @@ msgstr "各ラウンドのショップ更新回数の上限です。"
 #: src/task/CubieWarsTask.py
 msgid "Maximum running time before stopping."
 msgstr "この実行時間に達すると停止します。"
+
+#: src/task/CubieWarsTask.py
+msgid "Resume Story stage"
+msgstr "ストーリーステージを再開"

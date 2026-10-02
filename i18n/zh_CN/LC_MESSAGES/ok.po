@@ -1494,3 +1494,7 @@ msgstr "每轮商店的最大刷新次数。"
 #: src/task/CubieWarsTask.py
 msgid "Maximum running time before stopping."
 msgstr "达到此运行时长后停止。"
+
+#: src/task/CubieWarsTask.py
+msgid "Resume Story stage"
+msgstr "继续剧情关卡"

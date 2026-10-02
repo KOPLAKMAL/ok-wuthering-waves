@@ -14,11 +14,18 @@ The shop policy is a heuristic and does not guarantee a stage win.
    saves a screenshot without sending mouse or keyboard input.
 5. Use **Astrite run** to attempt uncleared stages and claim rewards, or
    **Claim rewards only** after playing the stages yourself.
+6. If a Story stage is already open, **Resume Story stage** resumes its tutorial,
+   Store, or combat before checking the stage list and continuing the Astrite run.
+   This option is for Story only; do not select it inside an Adventure stage.
 
 On Windows, run OK-WW as Administrator and approve the Windows UAC prompt
 yourself. Live input is blocked with an actionable error when OK-WW has no
 administrator privileges. This prevents silent clicks against an elevated game;
 input-free inspection still works without elevation.
+
+The first Store phase waits for its round splash and observes again before
+shopping. A delayed tutorial returns control to the tutorial handler. Unreadable
+resources are retried a bounded number of times; they never default to zero.
 
 The task reads the stage list again after each attempt; it does not persist
 assumed victories. Stage attempts, shop refreshes, and session duration have

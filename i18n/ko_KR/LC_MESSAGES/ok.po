@@ -1443,3 +1443,7 @@ msgstr "라운드당 상점 새로고침 횟수의 상한입니다."
 #: src/task/CubieWarsTask.py
 msgid "Maximum running time before stopping."
 msgstr "이 실행 시간에 도달하면 중지합니다."
+
+#: src/task/CubieWarsTask.py
+msgid "Resume Story stage"
+msgstr "스토리 스테이지 이어하기"

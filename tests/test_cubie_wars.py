@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import cv2
 import pytest
 
-from src.task.CubieWarsTask import CubieWarsTask
+from src.task.CubieWarsTask import CubieWarsTask, ShopInterrupted
 from src.task.cubie_wars.model import (
     ADVENTURE_COUNT, ASTRITE_TOTAL, Screen, Text, classify, next_stage, parse_item,
 )
@@ -186,3 +186,59 @@ def test_windows_run_without_admin_stops_before_sending_input():
     task.click_relative.assert_not_called()
     task.mouse_down.assert_not_called()
     task.send_key.assert_not_called()
+
+
+def test_delayed_tutorial_prevents_shop_actions():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.GUIDE)
+    task.synthesize = MagicMock()
+    task.coins = MagicMock()
+    assert task.prepare_round() is False
+    task.synthesize.assert_not_called()
+    task.coins.assert_not_called()
+    task.mouse_down.assert_not_called()
+
+
+def test_resource_ocr_retries_an_initial_animation_frame():
+    task = make_task()
+    task.ocr = MagicMock(side_effect=[[], [SimpleNamespace(name='6')]])
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    assert task.coins() == 6
+    assert task.ocr.call_count == 2
+
+
+def test_resource_ocr_defers_to_a_new_tutorial():
+    task = make_task()
+    task.ocr = MagicMock(return_value=[])
+    task.observe = MagicMock(return_value=Screen.GUIDE)
+    with pytest.raises(ShopInterrupted):
+        task.coins()
+    assert task.ocr.call_count == 1
+
+
+def test_unreadable_resource_still_stops_after_bounded_retries():
+    task = make_task()
+    task.ocr = MagicMock(return_value=[])
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='resource value is unreadable'):
+        task.coins()
+    assert task.ocr.call_count == 4
+
+
+def test_resume_story_rejoins_stage_verification_and_rewards():
+    task = make_task()
+    task.config['Mode'] = 'Resume Story stage'
+    task.observe = MagicMock(return_value=Screen.GUIDE)
+    task.is_browser = MagicMock(return_value=False)
+    task.play_stage = MagicMock()
+    task.wait_screen = MagicMock()
+    task.close_page = MagicMock()
+    task.complete_mode = MagicMock()
+    task.claim_rewards = MagicMock()
+    with patch('src.task.CubieWarsTask.is_admin', return_value=True), \
+            patch('src.task.CubieWarsTask.WWOneTimeTask.run'):
+        task.run()
+    task.play_stage.assert_called_once_with('Story')
+    assert [call.args for call in task.complete_mode.call_args_list] == [('Story',), ('Adventure',)]
+    task.claim_rewards.assert_called_once()

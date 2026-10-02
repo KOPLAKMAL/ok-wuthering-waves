@@ -15,6 +15,10 @@ from src.task.cubie_wars.vision import (
 )
 
 
+class ShopInterrupted(Exception):
+    """A tutorial appeared after the round's Store animation."""
+
+
 class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     """Experimental English Cubie Wars task; never treats an unknown screen as success."""
 
@@ -32,7 +36,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             "Session minutes": 180,
         }
         self.config_type = {"Mode": {"type": "drop_down", "options": [
-            "Inspect screen", "Astrite run", "Claim rewards only"]}}
+            "Inspect screen", "Astrite run", "Claim rewards only", "Resume Story stage"]}}
         self.config_description = {
             "Mode": "Inspect screen saves a screenshot without clicking. Astrite run plays stages and claims rewards.",
             "Stage attempts": "Stop after this many failed attempts at one stage.",
@@ -60,12 +64,21 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             return
         if abs(self.width / self.height - 16 / 9) > .02 or self.width < 1280:
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
-        if screen != Screen.HUB:
+        resume_story = self.config.get("Mode") == "Resume Story stage"
+        if resume_story:
+            if screen not in {Screen.GUIDE, Screen.DETAILS, Screen.SHOP, Screen.MATCHING,
+                              Screen.COMBAT, Screen.ROUND_RESULT, Screen.STAGE_RESULT, Screen.EVENT}:
+                self.stop_with_evidence("Open the active Story stage before choosing Resume Story stage")
+        elif screen != Screen.HUB:
             self.stop_with_evidence("Open the Cubie Wars Story Mode / Adventure Mode menu before starting")
         if not self.is_browser() and not is_admin():
             self.stop_with_evidence("Restart OK-WW as Administrator using Start Cubie Wars.cmd, then approve Windows UAC")
         WWOneTimeTask.run(self)
-        if self.config.get("Mode") == "Astrite run":
+        if resume_story:
+            self.play_stage("Story")
+            self.wait_screen({Screen.STAGES})
+            self.close_page()
+        if resume_story or self.config.get("Mode") == "Astrite run":
             for mode in ("Story", "Adventure"):
                 self.complete_mode(mode)
         self.claim_rewards()
@@ -187,7 +200,11 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 round_text = self.text(r"Round\s*\d+.*Store", (.55, .09, .8, .2)).name
                 if last_shop == round_text:
                     self.stop_with_evidence("The prepared round did not start")
-                self.prepare_round()
+                try:
+                    if not self.prepare_round():
+                        continue
+                except ShopInterrupted:
+                    continue  # Re-enter the tutorial branch on the next observation.
                 self.observe()
                 if classify(self._texts) != Screen.SHOP:
                     self.stop_with_evidence("Shop layout changed during preparation")
@@ -212,18 +229,28 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.stop_with_evidence("Cubie Wars stage action limit reached")
 
     def number(self, region, fraction=False):
-        boxes = self.ocr(*region, threshold=.65)
-        text = " ".join(b.name for b in boxes)
         pattern = r"(\d+)\s*/\s*(\d+)" if fraction else r"\d+"
-        match = re.search(pattern, text)
-        if not match:
-            self.stop_with_evidence(f"Cubie Wars resource value is unreadable: {region}")
-        return (int(match[1]), int(match[2])) if fraction else int(match[0])
+        for attempt in range(4):
+            boxes = self.ocr(*region, threshold=.65)
+            text = " ".join(b.name for b in boxes)
+            match = re.search(pattern, text)
+            if match:
+                return (int(match[1]), int(match[2])) if fraction else int(match[0])
+            if self.observe() == Screen.GUIDE:
+                raise ShopInterrupted()
+            if attempt < 3:
+                self.sleep(.35)
+        self.stop_with_evidence(f"Cubie Wars resource value is unreadable: {region}")
 
     def coins(self):
         return self.number((.934, .121, .966, .162))
 
     def prepare_round(self):
+        # The first-time tutorial opens after the initial round splash. Observe
+        # again after it settles, before reading resources or touching items.
+        self.sleep(1.5)
+        if self.observe() != Screen.SHOP:
+            return False
         self.synthesize()
         for refresh in range(self.config.get("Refreshes per round", 4) + 1):
             skipped = set()
@@ -289,6 +316,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.next_frame()
                 if self.coins() >= before:
                     self.stop_with_evidence("Shop refresh did not consume a coin")
+        return True
 
     def drag_to_book(self, source, baseline, sheet=False):
         points = placement_points(baseline, sheet)
