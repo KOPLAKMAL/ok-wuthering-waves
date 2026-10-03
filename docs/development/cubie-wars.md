@@ -169,6 +169,13 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
 
 ## Current limitations / live validation still required
 
+The 08:21 Story 2 capture exposed a right-hand Training Sword tooltip beyond
+the previous OCR crop. Hover OCR now extends to x=.98 and uses confidence .65
+to retain the native 2s value (measured .652). The DMG parser accepts the
+crossed-swords icon read as XDMG. The actual old/new crop OCR is preserved in
+`live_right_sword_ocr.json`; tests verify Weapon, DMG 6, interval 2s, COST 3
+and the capacity guard before buying. Live purchase still needs verification.
+
 - Tutorial popups, quick synthesis, discount OCR, item stacking and replacement,
   and event choices need live validation. The task currently adds items to free
   slots; it does not solve a global inventory rearrangement or replacement plan.

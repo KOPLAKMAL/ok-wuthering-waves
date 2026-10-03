@@ -363,7 +363,10 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         for attempt in range(4):
             self.sleep(.4)
             self.next_frame()
-            boxes = self.ocr(.2, .075, .68, .7, threshold=.7)
+            # Right-hand offers can place their card beyond x=.68. Read the
+            # whole tooltip area so category and right-aligned stats survive.
+            # Native Training Sword's clear 2s row scores .652 in this crop.
+            boxes = self.ocr(.2, .075, .98, .7, threshold=.65)
             tooltip = [Text(b.name, b.x / self.width, b.y / self.height,
                             b.width / self.width, b.height / self.height) for b in boxes]
             item = parse_item(tooltip)

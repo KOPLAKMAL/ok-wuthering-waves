@@ -28,6 +28,7 @@ LIVE_HOVER = json.loads((FIXTURES / 'live_hover_ocr.json').read_text(encoding='u
 LIVE_SYNTHESIS = json.loads((FIXTURES / 'live_synthesis_modal_ocr.json').read_text(encoding='utf-8'))
 LIVE_PERSISTENT_ITEM = json.loads((FIXTURES / 'live_persistent_item_ocr.json').read_text(encoding='utf-8'))
 LIVE_UNLOCK = json.loads((FIXTURES / 'live_new_warrior_ocr.json').read_text(encoding='utf-8'))
+LIVE_RIGHT_SWORD = json.loads((FIXTURES / 'live_right_sword_ocr.json').read_text(encoding='utf-8'))
 TUTORIAL_CASES = json.loads((FIXTURES / 'tutorial/ocr.json').read_text(encoding='utf-8'))
 
 
@@ -264,6 +265,35 @@ def test_tooltip_stats_and_capacity_guard():
     assert item.category == 'Weapon'
     assert item.score('Rapier', 2, 5, 2) == 0
     assert item.score('Rapier', 3, 5, 2) > item.score('Gold Hunter', 3, 5, 2)
+
+
+def test_native_right_tooltip_recovers_category_and_stat_columns():
+    # Actual failing Story 2 capture: the old crop cuts off Weapon and all
+    # right-aligned numbers. The wider crop also reads the icon as XDMG.
+    partial = parse_item([Text(**t) for t in LIVE_RIGHT_SWORD['old']])
+    assert partial.category == '' and partial.cost is None
+    item = parse_item([Text(**t) for t in LIVE_RIGHT_SWORD['wide']])
+    assert (item.name, item.category, item.cost, item.damage, item.interval) == (
+        'Training Sword', 'Weapon', 3, 6, 2)
+    assert item.purchase_rank('Rapier', 2, 5, 4) is None
+    assert item.purchase_rank('Rapier', 3, 5, 4) is not None
+
+
+def test_shop_reads_native_right_weapon_on_first_hover():
+    task = make_task()
+    task.executor.method.width, task.executor.method.height = 1920, 1080
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_right_sword.png'))
+    boxes = [SimpleNamespace(name=t['name'], x=t['x']*1920, y=t['y']*1080,
+                             width=t['width']*1920, height=t['height']*1080)
+             for t in LIVE_RIGHT_SWORD['wide']]
+    task.ocr = MagicMock(return_value=boxes)
+    task.require_shop = MagicMock()
+    item = task.shop_item(2)
+    assert (item.name, item.category, item.damage, item.interval, item.cost) == (
+        'Training Sword', 'Weapon', 6, 2, 3)
+    task.ocr.assert_called_once_with(.2, .075, .98, .7, threshold=.65)
+    task.require_shop.assert_not_called()
+    task.move_relative.assert_called_once_with(*task.SHOP_SLOTS[2])
 
 
 def test_claimed_tick_is_distinct_from_an_available_astrite_icon():
@@ -970,7 +1000,7 @@ def test_unreadable_recommended_offer_stops_before_spending_on_refresh(missing):
     task.coins = MagicMock(return_value=1)
     task.number = MagicMock(return_value=(3, 6))
     task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
-                         [] if missing == 'price' or args == (.2, .075, .68, .7)
+                         [] if missing == 'price' or args == (.2, .075, .98, .7)
                          else [SimpleNamespace(name='1')])
     task.click_relative = MagicMock()
     task.screenshot = MagicMock()
@@ -993,7 +1023,7 @@ def test_native_recommendation_is_attempted_with_last_coin_before_refresh():
                                width=t['width']*1920, height=t['height']*1080)
                for t in case['texts']]
     task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
-                         tooltip if args == (.2, .075, .68, .7) else [SimpleNamespace(name='1')])
+                         tooltip if args == (.2, .075, .98, .7) else [SimpleNamespace(name='1')])
     task.drag_to_book = MagicMock(return_value=True)
     task.click_relative = MagicMock()
     assert task.prepare_round() is True
@@ -1080,7 +1110,7 @@ def test_live_recommended_crystal_reaches_purchase_before_refresh():
     task.move_relative.side_effect = move
     task.observe = MagicMock(side_effect=observe)
     task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
-                         boxes if args == (.2, .075, .68, .7) else [SimpleNamespace(name='1')])
+                         boxes if args == (.2, .075, .98, .7) else [SimpleNamespace(name='1')])
     task.drag_to_book = MagicMock(return_value=True)
     task.click_relative = MagicMock()
     assert task.prepare_round() is True
@@ -1332,7 +1362,7 @@ def test_shop_attempts_unmarked_sheets_then_weapons_then_recommended_accessories
     task.coins = MagicMock(return_value=6)
     task.number = MagicMock(return_value=(3, 6))
     task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
-                         [] if args == (.2, .075, .68, .7) else [SimpleNamespace(name='3')])
+                         [] if args == (.2, .075, .98, .7) else [SimpleNamespace(name='3')])
     task.drag_to_book = MagicMock(return_value=False)
     task._placement_reason = 'no_space'
     kinds = ['Weapon', 'Sheet', 'Accessory', 'Relic', 'Item']

@@ -235,4 +235,7 @@ def parse_item(texts):
     if cost is None and category in {'Accessory', 'Relic', 'Item'}:
         cost = 0
     return Item(name, role, sheet, int(cost) if cost is not None else None,
-                stat(r"\bDMG\b", 0), stat(r"Attack Interval", 1), text, category)
+                # OCR can join the crossed-swords icon to DMG as "XDMG".
+                # Match the stat label, never a mention in the description.
+                stat(r"^\s*(?:[^\w]|X)*DMG\b", 0),
+                stat(r"Attack Interval", 1), text, category)
