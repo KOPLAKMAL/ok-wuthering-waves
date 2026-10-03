@@ -12,7 +12,7 @@ from src.task.cubie_wars.model import (
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, crop, green_check, number_frame, placement_points, possible_recommendation,
-    preview_counts, recipe_available, recommended_item,
+    preview_counts, recipe_available, recommended_item, recommended_event,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -715,14 +715,40 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.stop_with_evidence("Could not confirm the synthesized weapon returned to the book")
 
     def choose_event(self):
-        # Inspect all three descriptions and prefer survivability over a random
-        # item. This is a heuristic, not a guarantee of winning the round.
+        def cards():
+            return [x for x in (.22, .5, .78) if any(
+                x - .12 < t.center[0] < x + .12 and .4 < t.center[1] < .49
+                for t in self._texts)]
+
+        def marked(positions):
+            return [x for x in positions if recommended_event(self.frame, x)]
+
+        positions = cards()
+        if not positions:
+            self.stop_with_evidence('Cubie Wars Event cards were not recognized')
+        choices = marked(positions)
+        # Each card allows one free reroll. The first tutorial has just one
+        # mandatory card; confirm it without rerolling away its granted items.
+        if not choices and len(positions) > 1:
+            for x in positions:
+                self.click_relative(x, .765, after_sleep=.7)
+                if self.observe() != Screen.EVENT:
+                    self.stop_with_evidence('Cubie Wars Event screen changed after refresh')
+                refreshed = cards()
+                if refreshed != positions:
+                    self.stop_with_evidence('Cubie Wars Event cards were unreadable after refresh')
+                choices = marked(refreshed)
+                if choices:
+                    break
+            positions = cards()
         candidates = []
-        for x in (.26, .5, .74):
-            text = joined([t for t in self._texts if x - .1 < t.center[0] < x + .1])
+        for x in choices or positions:
+            text = joined([t for t in self._texts if x - .12 < t.center[0] < x + .12])
             score = sum(text.lower().count(word) * weight for word, weight in (
                 ("shield", 5), ("heal", 5), ("max hp", 4), ("gold", 2), ("coin", 2), ("random", -1)))
             candidates.append((score, x))
+        if not candidates:
+            self.stop_with_evidence('Cubie Wars Event cards disappeared after refresh')
         self.click_relative(max(candidates)[1], .5, after_sleep=.3)
         self.observe()
         self.click_text(r"^Confirm$", (.3, .75, .8, 1))

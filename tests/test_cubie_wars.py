@@ -17,6 +17,7 @@ from src.task.cubie_wars.model import (
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, number_frame, placement_points, possible_recommendation,
     recipe_available, recommended_item,
+    recommended_event,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
 
@@ -27,6 +28,133 @@ LIVE_HOVER = json.loads((FIXTURES / 'live_hover_ocr.json').read_text(encoding='u
 LIVE_SYNTHESIS = json.loads((FIXTURES / 'live_synthesis_modal_ocr.json').read_text(encoding='utf-8'))
 LIVE_PERSISTENT_ITEM = json.loads((FIXTURES / 'live_persistent_item_ocr.json').read_text(encoding='utf-8'))
 LIVE_UNLOCK = json.loads((FIXTURES / 'live_new_warrior_ocr.json').read_text(encoding='utf-8'))
+TUTORIAL_CASES = json.loads((FIXTURES / 'tutorial/ocr.json').read_text(encoding='utf-8'))
+
+
+def tutorial_case(name):
+    return next(case for case in TUTORIAL_CASES if case['name'] == name)
+
+
+@pytest.mark.parametrize('case', TUTORIAL_CASES, ids=lambda case: case['name'])
+def test_supplied_story_1_2_3_tutorial_recognition(case):
+    assert classify([Text(**t) for t in case['texts']]) == Screen[case['expected']]
+
+
+@pytest.mark.parametrize('width', [1280, 1600, 1920])
+@pytest.mark.parametrize('case', [c for c in TUTORIAL_CASES if c['expected'] == 'SPOTLIGHT'],
+                         ids=lambda case: case['name'])
+def test_supplied_highlight_clicks_verified_border_before_game_actions(case, width):
+    task = make_task()
+    image = cv2.imread(str(FIXTURES / 'tutorial' / (case['name']+'.jpg')))
+    task.executor.frame = cv2.resize(image, (width, width*9//16))
+    task._texts = [Text(**t) for t in case['texts']]
+    task.click_relative = MagicMock()
+    anchor = spotlight_instruction(task._texts)[1]
+    assert spotlight_target(task.frame, anchor) == anchor
+    task.handle_spotlight()
+    task.click_relative.assert_called_once_with(*anchor, after_sleep=.7)
+
+
+@pytest.mark.parametrize('name', ['story_2_03', 'story_2_07'])
+def test_supplied_single_page_tutorial_confirms_without_pressing_d(name):
+    task = make_task()
+    task._texts = [Text(**t) for t in tutorial_case(name)['texts']]
+    task.click_relative = MagicMock()
+    task.handle_guide()
+    confirm = next(t for t in task._texts if t.name == 'Confirm')
+    task.click_relative.assert_called_once_with(*confirm.center, after_sleep=.6)
+
+
+@pytest.mark.parametrize('name', ['story_1_13', 'story_1_14', 'story_1_16',
+                                'story_2_00', 'story_2_01', 'story_2_02', 'story_2_06'])
+def test_supplied_shop_tutorial_defers_resource_reads_and_shopping(name):
+    task = make_task()
+    task._texts = [Text(**t) for t in tutorial_case(name)['texts']]
+    task.observe = MagicMock(side_effect=lambda: classify(task._texts))
+    task.synthesize = MagicMock()
+    task.coins = MagicMock()
+    task.number = MagicMock()
+    task.shop_item = MagicMock()
+    assert task.prepare_round() is False
+    task.synthesize.assert_not_called()
+    task.coins.assert_not_called()
+    task.number.assert_not_called()
+    task.shop_item.assert_not_called()
+
+
+@pytest.mark.parametrize('width', [1280, 1600, 1920])
+def test_event_thumb_is_distinct_from_card_gold_decoration(width):
+    image = cv2.imread(str(FIXTURES / 'tutorial/story_3_01.jpg'))
+    image = cv2.resize(image, (width, width*9//16))
+    assert [recommended_event(image, x) for x in (.22, .5, .78)] == [False, False, True]
+    ordinary = cv2.imread(str(FIXTURES / 'tutorial/story_3_00.jpg'))
+    ordinary = cv2.resize(ordinary, (width, width*9//16))
+    assert not any(recommended_event(ordinary, x) for x in (.22, .5, .78))
+
+
+def event_task(name):
+    task = make_task()
+    task._texts = [Text(**t) for t in tutorial_case(name)['texts']]
+    task.executor.frame = cv2.imread(str(FIXTURES / 'tutorial' / (name+'.jpg')))
+    task.click_relative = MagicMock()
+    task.observe = MagicMock(return_value=Screen.EVENT)
+    return task
+
+
+def test_event_selects_thumb_before_survivability_heuristic_without_refresh():
+    task = event_task('story_3_01')
+    task.choose_event()
+    confirm = next(t for t in task._texts if t.name == 'Confirm')
+    assert [call.args for call in task.click_relative.call_args_list] == [(.78, .5), confirm.center]
+
+
+def test_event_refreshes_until_thumb_appears_then_selects_it():
+    task = event_task('story_3_00')
+    def observe():
+        task._texts = [Text(**t) for t in tutorial_case('story_3_01')['texts']]
+        task.executor.frame = cv2.imread(str(FIXTURES / 'tutorial/story_3_01.jpg'))
+        return Screen.EVENT
+    task.observe.side_effect = observe
+    task.choose_event()
+    assert [call.args for call in task.click_relative.call_args_list[:2]] == [(.22, .765), (.78, .5)]
+
+
+def test_event_without_thumbs_refreshes_each_card_once_then_confirms_fallback():
+    task = event_task('story_3_00')
+    task.choose_event()
+    clicks = [call.args for call in task.click_relative.call_args_list]
+    assert clicks[:3] == [(.22, .765), (.5, .765), (.78, .765)]
+    assert len(clicks) == 5
+    assert clicks[3][1] == .5
+    assert clicks[4] == next(t.center for t in task._texts if t.name == 'Confirm')
+
+
+def test_mandatory_single_event_card_does_not_reroll():
+    task = event_task('story_2_04')
+    task.choose_event()
+    assert [call.args for call in task.click_relative.call_args_list] == [
+        (.5, .5), next(t.center for t in task._texts if t.name == 'Confirm')]
+
+
+def test_event_screen_change_after_refresh_stops_before_selecting_or_confirming():
+    task = event_task('story_3_00')
+    task.observe.return_value = Screen.SHOP
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='Event screen changed after refresh'):
+        task.choose_event()
+    task.click_relative.assert_called_once_with(.22, .765, after_sleep=.7)
+
+
+def test_unreadable_event_cards_after_refresh_stop_before_more_input():
+    task = event_task('story_3_00')
+    def observe():
+        task._texts = [t for t in task._texts if not (.4 < t.center[1] < .49)]
+        return Screen.EVENT
+    task.observe.side_effect = observe
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='Event cards were unreadable after refresh'):
+        task.choose_event()
+    task.click_relative.assert_called_once_with(.22, .765, after_sleep=.7)
 
 
 def frame(name):
@@ -1158,13 +1286,16 @@ def test_speed_stops_if_combat_ends_during_adjustment():
     task.click_relative.assert_called_once()
 
 
-def test_first_result_trophy_tip_does_not_hide_the_continue_screen():
+def test_first_result_trophy_tip_takes_priority_over_continue_prompt():
     # Actual labels in the 04:50 live OCR log; the tooltip hides the usual
     # Current Victories and Retries Available labels until it is dismissed.
     texts = [Text('Lose', .2, .2), Text('Round1', .45, .1), Text('WIN', .7, .2),
              Text('Win duels to earn Trophies. Collect every Trophy for', .2, .5),
              Text('complete victory', .2, .54), Text('Click anywhere to continue', .4, .9)]
-    assert classify(texts) == Screen.ROUND_RESULT
+    # Supplied story-stage screenshots show that this tip highlights the trophy,
+    # which must be clicked before the ordinary result can be continued.
+    assert classify(texts) == Screen.SPOTLIGHT
+    assert spotlight_instruction(texts)[1] == (.5, .487)
 
 
 @pytest.mark.parametrize('case', json.loads((FIXTURES/'item_categories_ocr.json').read_text(encoding='utf-8')),

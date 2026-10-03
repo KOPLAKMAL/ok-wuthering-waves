@@ -79,6 +79,12 @@ def possible_recommendation(frame, point):
                for left, top, width, height, area in stats[1:])
 
 
+def recommended_event(frame, x):
+    # The Event card's upper-right thumb uses the same gold shape as the shop.
+    # Translate its observed position into the shop detector's price anchor.
+    return recommended_item(frame, (x + .06, .315))
+
+
 def spotlight_target(frame, anchor):
     """Find the bright rounded yellow tutorial border near its known control."""
     h, w = frame.shape[:2]
@@ -96,13 +102,25 @@ def spotlight_target(frame, anchor):
             continue
         tile = mask[y:y+height, x:x+width] > 0
         bx, by = max(2, round(width*.12)), max(2, round(height*.12))
+        # The shop price line can join the refresh highlight on its left.
+        # Recover the actual straight vertical border from that attachment.
+        if anchor == (.895, .574):
+            coverage = tile[by:-by, :round(width*.3)].mean(axis=0)
+            straight = np.flatnonzero(coverage > .85)
+            if len(straight):
+                tile = tile[:, straight[0]:]
+                bx = max(2, round(tile.shape[1]*.12))
         # A tutorial frame has continuous yellow on all four edges. Coins,
         # swords, and decorative gold inside a control do not meet this check.
         edges = (tile[:by, bx:-bx].any(axis=0).mean(),
                  tile[-by:, bx:-bx].any(axis=0).mean(),
                  tile[by:-by, :bx].any(axis=1).mean(),
                  tile[by:-by, -bx:].any(axis=1).mean())
-        if min(edges) > .7:
+        # Start's frame reaches the bottom of the visible game area. A masked
+        # UID or the viewport can cut its bottom edge; require the other three.
+        clipped_start = anchor == (.895, .84) and y + height >= .965*h
+        required = (edges[0], edges[2], edges[3]) if clipped_start else edges
+        if min(required) > .7:
             # The speed highlight also encloses Pause. Click the observed
             # control inside the verified border, not the rectangle's center.
             candidates.append((width*height, anchor))

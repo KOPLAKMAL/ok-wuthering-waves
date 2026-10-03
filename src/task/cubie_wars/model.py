@@ -64,7 +64,8 @@ def classify(texts):
         return Screen.PURCHASE
     if has(r"Turn to the last page|Items must be placed entirely|Items placed in the Storybook") or (
             has(r'^Confirm$', (.3, .8, .7, 1))
-            and has(r'^A$', (.2, .7, .4, .87)) and has(r'^D$', (.65, .7, .83, .87))):
+            and ((has(r'^A$', (.2, .7, .4, .87)) and has(r'^D$', (.65, .7, .83, .87)))
+                 or has(r'^Events$|^Selling Items$', (.04, .25, .35, .38)))):
         return Screen.GUIDE
     if spotlight_instruction(texts):
         return Screen.SPOTLIGHT
@@ -119,9 +120,19 @@ def spotlight_instruction(texts):
         (r"(?:set\s*amount\s*of\s*Coins\s*after\s*each\s*round|"
          r"unused\s*Coins\s*will\s*be\s*carried\s*over)", (.937, .144)),
         (r"Drag\s*Items\s*into\s*the\s*Sheet\s*to\s*purchase", (.636, .278)),
-        (r"Drag\s*the\s*Items\s*you\s*want\s*into\s*the\s*Sheet", (.348, .37)),
+        (r"Drag\s*the\s*I?tems\s*you\s*want\s*into\s*the\s*Sheet", (.348, .37)),
         (r"Manage\s*your\s*set\s*and\s*click\s*the\s*bottom\s*right", (.895, .84)),
         (r"Use\s*the\s*Speed\s*Button\s*to\s*adjust\s*the\s*combat\s*s?peed", (.933, .177)),
+        (r"Each\s*Cube\s*has\s*their\s*own\s*Cube\s*Feature\s*and\s*Default\s*Set", (.83, .46)),
+        (r"Win\s*duels\s*to\s*earn\s*Trophies.*Collect\s*every\s*Trophy", (.5, .487)),
+        (r"Losing\s*a\s*duel\s*costs\s*a\s*Retry.*Exhausting\s*all\s*Retries", (.5, .69)),
+        (r"You\s*must\s*purchase\s*a\s*Sheet\s*to\s*place\s*Items", (.636, .278)),
+        (r"Refresh\s*the\s*Item\s*inventory\s*in\s*the\s*Shop\s*here", (.895, .574)),
+        (r"Synthesize\s*Items\s*for\s*more\s*powerful\s*effects.*buying\s*these\s*two\s*Items", (.70, .30)),
+        (r"Each\s*Weapon\s*has\s*its\s*own\s*COST", (.333, .445)),
+        (r"You\s*cannot\s*enter\s*combat\s*if\s*you\s*exceed\s*the\s*Storybook\s*COST", (.148, .12)),
+        (r"Storybook\s*COST\s*limit\s*increases\s*as\s*rounds\s*progress", (.148, .12)),
+        (r"View\s*the\s*selected\s*Event\s*here", (.274, .056)),
     )
     text = joined(texts)
     return next(((pattern, anchor) for pattern, anchor in prompts

@@ -16,6 +16,7 @@ The shop policy is a heuristic and does not guarantee a stage win.
    **Claim rewards only** after playing the stages yourself.
 6. If a Story stage is already open, **Resume Story stage** resumes its tutorial,
    Store, or combat before checking the stage list and continuing the Astrite run.
+   It also accepts the new-warrior popup or the completed Story stage list.
    This option is for Story only; do not select it inside an Adventure stage.
 
 On Windows, run OK-WW as Administrator and approve the Windows UAC prompt
@@ -40,16 +41,23 @@ If a small crop misses a number, the task accepts a single complete numeric
 label from full-screen OCR inside the same resource region. Tutorials take
 precedence over this fallback.
 
-The recorded tutorial highlights for coins, the shop item, the destination
-Sheet, Start, and combat speed are handled
+The recorded Story 1–3 tutorial highlights for Cube info, coins, shop items,
+Sheets, Start, combat speed, trophies, retries, COST, refresh, synthesis offers,
+and the selected Event are handled
 before normal Store or combat actions. Each click requires both the instruction
 text and a yellow border around the expected control. The speed click targets
 the speed control inside the shared border with Pause. A missing border or three
-clicks without advancing stops with a screenshot. Other tutorial instructions
-still need observation and live validation.
+clicks without advancing stops with a screenshot. The refresh border may join
+the shop price line; Start's border may be clipped at the bottom of the viewport.
+Both cases still require the visible straight yellow edges. Other tutorial
+instructions still need observation and live validation.
 The two drag instructions are introductory click-through overlays in the
 recording: the highlighted shop item and then the Sheet are clicked before
 normal purchasing begins. They do not initiate a purchase themselves.
+Guide pages advance with D only when its navigation label is recognized;
+Confirm takes precedence on the final page. The one-page Events and Selling
+Items guides confirm directly. New Cubie Warrior popups are dismissed before
+waiting for the stage list, with at most three attempts.
 
 The task reads the stage list again after each attempt; it does not persist
 assumed victories. Stage attempts, shop refreshes, and session duration have
@@ -80,9 +88,10 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
 
 - Hold the left mouse button to drag; press **R** to rotate while holding.
 - A purchase is attempted only with a readable price, adequate coins, and a
-  recognized tooltip and a gold recommendation thumb above its price badge.
+  recognized tooltip. Sheet and Weapon offers may be purchased without a thumb;
+  Accessory, Relic, and Item offers require a gold recommendation thumb.
   Weapon COST must fit the remaining capacity.
-- Buy recommended items in this order: Weapon, Sheet, Accessory, Relic, Item.
+- Buy eligible items in this order: Sheet, Weapon, Accessory, Relic, Item.
   Within a category, rank by damage per attack interval, role, and defensive
   effects. An unknown category is skipped. The thumb is detected before
   hovering so tooltips do not obscure it.
@@ -93,7 +102,7 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   gold marks and unreadable marked offers stop before refresh spending instead
   of being treated as absent recommendations. Save up to 20 compact offer
   captures per run to diagnose the exact scanned frames.
-- With no eligible recommended purchase, refresh while coins cover the visible
+- With no eligible purchase, refresh while coins cover the visible
   refresh price and the configured refresh limit permits it. Verify that the
   coin decrease equals the refresh price, then scan the new offers. Start combat
   when no further purchases or refreshes are possible within those limits.
@@ -144,6 +153,10 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   clears that card before reading the round or taking shop actions.
 - Try available yellow Synthesize buttons, bounded shop refreshes, and 2x
   combat speed. Adventure currently selects Lynae; Story uses its fixed Cubie.
+- Event cards prefer a visible recommendation thumb. If none is present, try
+  each card's refresh once, stopping when a recommendation appears. If none
+  appears, use the existing defensive-effect heuristic and confirm. The first
+  tutorial's single mandatory Event is confirmed without refresh.
 - The 06:31 run opened a Sword of Night synthesis modal after purchasing the
   Crystal, then failed reading book capacity hidden by that modal. Both modal
   and inline synthesis now click an observed yellow Synthesize button without
@@ -180,6 +193,10 @@ recording frames, not hand-written ideal labels. Small JPEG replay fixtures
 have the user-ID strip removed. The claimed-check asset comes from the same
 recording. The video, account configuration, caches, and runtime logs are not
 part of the feature.
+`tests/images/cubie_wars/tutorial/` contains the 31 additional Story 1–3
+screenshots supplied by the user and their actual OCR output. Tests verify all
+screen types, highlighted targets at three resolutions, single-page guides,
+deferring shop resource reads under tutorials, and Event thumb/refresh choices.
 The thumb asset and Store fixtures also come from the recording. Native-size
 coin and price crops reproduce the live OCR failure and its correction with the
 same OCR settings as the application; these tests still do not prove live input
