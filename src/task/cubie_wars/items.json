@@ -15,7 +15,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3174).png"
     },
     {
       "source_filename": "Screenshot (3175).png",
@@ -31,7 +50,18 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3175).png"
     },
     {
       "source_filename": "Screenshot (3176).png",
@@ -47,7 +77,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3176).png"
     },
     {
       "source_filename": "Screenshot (3177).png",
@@ -63,7 +112,34 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3177).png"
     },
     {
       "source_filename": "Screenshot (3178).png",
@@ -79,7 +155,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3178).png"
     },
     {
       "source_filename": "Screenshot (3179).png",
@@ -95,7 +190,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3179).png"
     },
     {
       "source_filename": "Screenshot (3180).png",
@@ -111,7 +225,22 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3180).png"
     },
     {
       "source_filename": "Screenshot (3181).png",
@@ -127,7 +256,22 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3181).png"
     },
     {
       "source_filename": "Screenshot (3182).png",
@@ -143,7 +287,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3182).png"
     },
     {
       "source_filename": "Screenshot (3183).png",
@@ -159,7 +322,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3183).png"
     },
     {
       "source_filename": "Screenshot (3184).png",
@@ -175,7 +357,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3184).png"
     },
     {
       "source_filename": "Screenshot (3185).png",
@@ -191,7 +392,26 @@
       "warnings": [],
       "name_verification": "visually checked against title in review contact sheet",
       "cost_weight_status": "not displayed or unreadable; do not infer shop price",
-      "ocr_name_aliases": []
+      "ocr_name_aliases": [],
+      "sheet_cells": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "sheet_shape_verification": "visually checked mini footprint in Screenshot (3185).png"
     },
     {
       "source_filename": "Screenshot (3186).png",

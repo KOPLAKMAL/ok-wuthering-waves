@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from src.task.CubieWarsTask import CubieWarsTask, ShopInterrupted
+from src.task.cubie_wars.catalog import sheet_footprint
 from src.task.cubie_wars.model import (
     ADVENTURE_COUNT, ASTRITE_TOTAL, CHAR_ROLES, Item, Screen, Text, classify,
     next_stage, parse_item, selected_build, stage_cube, spotlight_instruction,
@@ -33,6 +34,7 @@ TUTORIAL_CASES = json.loads((FIXTURES / 'tutorial/ocr.json').read_text(encoding=
 BUILD_CASES = json.loads((FIXTURES / 'builds/ocr.json').read_text(encoding='utf-8'))
 RECOMMENDATION_CASES = json.loads((FIXTURES / 'recommendation_button_ocr.json').read_text())
 STORAGE_GUIDE = json.loads((FIXTURES / 'storage_guide/ocr.json').read_text())
+HELD_HP_SHEET = json.loads((FIXTURES / 'held_hp_bread_sheet_ocr.json').read_text(encoding='utf-8'))
 
 
 def build_texts(case):
@@ -836,6 +838,83 @@ def test_pickup_retries_missed_press_then_keeps_mouse_down_on_two_held_frames():
     assert moves[-1] == (.5, .78)
     task.require_shop.assert_called_once()
     task.send_key.assert_not_called()
+
+
+def test_real_sheet_rotate_merged_with_sold_is_still_a_held_item():
+    task = make_task()
+    del task.drag_active
+    task.executor.frame = cv2.imread(str(FIXTURES / 'held_hp_bread_sheet.png'))
+    def replay(*args, **kwargs):
+        return [SimpleNamespace(name=t['name']) for t in HELD_HP_SHEET['runtime_focused']
+                if t['confidence'] >= kwargs['threshold'] and kwargs['match'].fullmatch(t['name'])]
+    task.ocr = MagicMock(side_effect=replay)
+    assert any(t['name'] == 'Rotate Sold' for t in HELD_HP_SHEET['runtime_focused'])
+    assert task.drag_active()
+
+
+@pytest.mark.parametrize('text', ['Sold', 'Rotate Items to change their orientation',
+                                 'Adjust the Sheet and rotate Items'])
+def test_static_instruction_text_cannot_confirm_held_sheet(text):
+    task = make_task()
+    del task.drag_active
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
+                         [SimpleNamespace(name=text)] if kwargs['match'].fullmatch(text) else [])
+    assert not task.drag_active()
+
+
+def test_sheet_drag_uses_whole_footprint_plan_not_a_single_occupied_cell():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
+    task.executor.frame = before
+    task.click_relative = MagicMock()
+    shape = sheet_footprint('HP Bread Sheet')
+    with patch('src.task.CubieWarsTask.valid_preview', return_value=True), \
+            patch('src.task.CubieWarsTask.placement_points') as old_points:
+        assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, shape)
+    old_points.assert_not_called()
+    task.move_relative.assert_called_once_with(414/1920, 609/1080)
+    task.send_key.assert_not_called()
+    task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'placed'
+
+
+def test_sheet_plan_with_no_whole_fit_does_not_pick_up_or_claim_a_placement():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
+    oversized = tuple((col, 0) for col in range(9))
+    assert not task.drag_to_book(task.SHOP_SLOTS[2], before, True, oversized)
+    assert task._placement_reason == 'no_space'
+    task.pick_up.assert_not_called()
+    task.move_relative.assert_not_called()
+
+
+def test_rotated_sheet_plan_rotates_before_trying_its_center():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
+    task.executor.frame = before
+    plan = SimpleNamespace(rotation=1, point=(.3, .4))
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]), \
+            patch('src.task.CubieWarsTask.valid_preview', return_value=True):
+        assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
+    task.send_key.assert_called_once_with('r')
+    task.move_relative.assert_called_once_with(*plan.point)
+    task.mouse_up.assert_called_once()
+
+
+def test_geometric_sheet_fit_with_failed_preview_is_not_reported_as_no_space():
+    task = make_task()
+    before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
+    task.executor.frame = frame('invalid_ghost')
+    task.screenshot = MagicMock()
+    plan = SimpleNamespace(rotation=0, point=(.3, .4))
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]), \
+            patch('src.task.CubieWarsTask.preview_counts', return_value=(0, 1000)), \
+            patch('src.task.CubieWarsTask.valid_preview', return_value=False):
+        assert not task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
+    assert task._placement_reason == 'unknown'
+    task.send_key.assert_not_called()  # No more planned orientations.
+    task.mouse_up.assert_called_once()
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[2])
 
 
 def test_three_missed_pickups_do_not_search_or_report_a_purchase():

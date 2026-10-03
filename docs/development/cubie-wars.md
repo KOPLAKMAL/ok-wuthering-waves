@@ -199,6 +199,26 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   the same 102-pixel cell before rotating. Red collision previews skip these
   offsets. Stable green is still required; the 06:31 run confirms Crystal placement.
   Board-only before/held captures reproduce the missed preview in tests.
+
+Sheet expansion now has a separate grid planner. Empty space for another
+Sheet means bare board cells; an empty existing Sheet tile is still occupied
+for expansion. The twelve supplied Collection Sheet footprints are verified
+in the catalog. Check every footprint cell against the 8×6 board in each
+distinct rotation, prefer positions adjacent to existing Sheets, and aim at
+the whole shape's bounding-box center. Even-width shapes aim between cells.
+The 10:44 board has 20 occupied and 28 blank cells; HP Bread Sheet (2×3) has
+five valid geometric placements. Its preferred vertical plan starts at column
+1, row 3, with cursor center (414,609) in the 1920×1080 viewport. Bright
+obstructions are conservatively blocked. Unknown Sheet shapes retain probing
+of bare cells with live green-preview verification. A nonempty geometric plan
+whose preview fails is reported as unverifiable, not as proof of no space.
+
+The 10:43/10:44 lost-HP-Bread errors were false detections: the Sheet was still
+held, but actual OCR merged its control with the neighboring stamp as
+`Rotate Sold`. Accept that exact combined label as well as `Rotate`, while
+rejecting tutorial sentences. The preserved native capture reproduces the
+error. Both geometric plans and combined-label handling remain subject to live
+drop validation; two stable green previews and a coin decrease are required.
 - The 05:36 run confirms real hover opened the native "Random" Crystal card.
   Its Accessory label is below Adventurer, not beside it; read either layout
   without treating "Weapons" in the description as the category. A valid

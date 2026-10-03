@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from src.task.CubieWarsTask import CubieWarsTask
-from src.task.cubie_wars.catalog import CORE_ITEMS, core_item, definitions, normalize_name, reference_item
+from src.task.cubie_wars.catalog import CORE_ITEMS, core_item, definitions, normalize_name, reference_item, sheet_footprint
 from src.task.cubie_wars.model import Item, Screen, Text, parse_item
 
 
@@ -50,6 +50,20 @@ def test_catalog_preserves_base_variants_clipped_descriptions_and_absent_stats()
     assert not core_item('Everbright Polestar: Xtreme', 'Rover')
     assert core_item('Everbright Polestar: Xtreme', 'Aemeath')
     assert not core_item('Everbright Polestar', 'Aemeath')
+
+
+def test_every_provided_sheet_has_a_verified_footprint_and_other_items_do_not():
+    for row in definitions().values():
+        shape = sheet_footprint(row['name'])
+        if row['category'] == 'Sheet':
+            assert shape and len(shape) == len(set(shape))
+            assert row['source_filename'] in row['sheet_shape_verification']
+        else:
+            assert shape is None
+    assert len(sheet_footprint('HP Bread Sheet')) == 6
+    assert len(sheet_footprint('Boom Boom Pow Sheet')) == 4
+    assert len(sheet_footprint('Speed Sand Sheet')) == 2
+    assert sheet_footprint('Unknown Sheet') is None
 
 
 @pytest.mark.parametrize('name,cost,damage', [

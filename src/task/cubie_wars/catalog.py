@@ -27,6 +27,13 @@ def core_item(name, cube):
     return normalize_name(name) in {normalize_name(n) for n in CORE_ITEMS.get(cube, ())}
 
 
+def sheet_footprint(name):
+    row = name_index().get(normalize_name(name))
+    if row and row['category'] == 'Sheet' and row.get('sheet_cells'):
+        return tuple(tuple(cell) for cell in row['sheet_cells'])
+    return None
+
+
 @lru_cache(maxsize=1)
 def definitions():
     records = json.loads(Path(__file__).with_name('items.json').read_text(encoding='utf-8'))['items']

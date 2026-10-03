@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -140,6 +141,77 @@ def grid_points():
             for row in range(6) for col in range(8)]
 
 
+def blank_board_cells(frame):
+    """Return bare board cells, excluding Sheets even when they hold items.
+
+    Calibrated on clean Store captures. The dark board has median brightness
+    below 110; Sheet tiles are brighter. Requiring most of the middle patch to
+    remain dark also treats a tooltip or another bright obstruction as blocked.
+    Read the baseline before picking an item up, not its occluded drag frame.
+    """
+    if frame is None or frame.size == 0:
+        return set()
+    h, w = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    blank = set()
+    for row in range(6):
+        for col in range(8):
+            center_x = (261 + col * 102) * w / 1920
+            center_y = (201 + row * 102) * h / 1080
+            left, right = round(center_x - 30 * w / 1920), round(center_x + 30 * w / 1920) + 1
+            top, bottom = round(center_y - 30 * h / 1080), round(center_y + 30 * h / 1080) + 1
+            tile = hsv[top:bottom, left:right, 2]
+            if tile.size and np.median(tile) <= 110 and np.mean(tile > 100) < .5:
+                blank.add((col, row))
+    return blank
+
+
+@dataclass(frozen=True)
+class SheetPlacement:
+    rotation: int
+    origin: tuple[int, int]
+    cells: tuple[tuple[int, int], ...]
+    point: tuple[float, float]
+    contacts: int
+
+
+def _sheet_contacts(cells, occupied):
+    return sum((col + dx, row + dy) in occupied
+               for col, row in cells
+               for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)))
+
+
+def sheet_placements(frame, footprint):
+    """Plan complete Sheet footprints and exact cursor centers for each turn."""
+    if not footprint:
+        return []
+    blank = blank_board_cells(frame)
+    occupied = {(col, row) for row in range(6) for col in range(8)} - blank
+    shape = tuple((int(col), int(row)) for col, row in footprint)
+    orientations = set()
+    result = []
+    for rotation in range(4):
+        min_col = min(col for col, row in shape)
+        min_row = min(row for col, row in shape)
+        normalized = tuple(sorted({(col - min_col, row - min_row) for col, row in shape}))
+        if normalized not in orientations:
+            orientations.add(normalized)
+            max_col = max(col for col, row in normalized)
+            max_row = max(row for col, row in normalized)
+            for row in range(6 - max_row):
+                for col in range(8 - max_col):
+                    cells = tuple((col + dx, row + dy) for dx, dy in normalized)
+                    if all(cell in blank for cell in cells):
+                        # Shop pickup uses the sprite center, so an even-width
+                        # Sheet must be aimed between cells, not at one center.
+                        point = ((261 + 102 * (col + max_col / 2)) / 1920,
+                                 (201 + 102 * (row + max_row / 2)) / 1080)
+                        result.append(SheetPlacement(rotation, (col, row), cells,
+                                                     point, _sheet_contacts(cells, occupied)))
+        shape = tuple((-row, col) for col, row in shape)
+    return sorted(result, key=lambda p: (p.rotation, -p.contacts, p.origin[1], p.origin[0]))
+
+
 def empty_sheet_cell(frame, point):
     x, y = point
     tile = crop(frame, (x - .017, y - .03, x + .017, y + .03))
@@ -158,11 +230,13 @@ def placement_points(frame, sheet=False):
     free = [p for p in points if empty_sheet_cell(frame, p)]
     if not sheet:
         return free
-    # Expansion needs a blank board cell. Try near existing sheets first to
-    # preserve a contiguous book, then all remaining cells. Ghosts verify fit.
-    return sorted((p for p in points if p not in free),
-                  key=lambda p: min(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2
-                                     for q in free), default=0))
+    # An item-free Sheet cell is still occupied for Sheet expansion. This
+    # fallback ranks only truly bare cells; known shapes use sheet_placements.
+    blank = blank_board_cells(frame)
+    occupied = {(col, row) for row in range(6) for col in range(8)} - blank
+    cells = sorted(blank, key=lambda cell: (-_sheet_contacts((cell,), occupied), cell[1], cell[0]))
+    return [((261 + col * 102) / 1920, (201 + row * 102) / 1080)
+            for col, row in cells]
 
 
 def preview_counts(before, held):
