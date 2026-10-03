@@ -272,15 +272,20 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.stop_with_evidence("Cubie Wars stage action limit reached")
 
     def read_active_build(self, already_open=False):
-        """N opens the active character's Role Guide, as confirmed by the user."""
+        """Click Recommendation to open the active character's Role Guide."""
         # An already-open Collection may have another character selected by
-        # hand. Reopen via N so it reflects the active battle character.
+        # hand. Reopen Recommendation so it reflects the active character.
         if already_open:
             self.click_relative(.943, .06, after_sleep=.6)
             self.wait_screen({Screen.SHOP})
         if not self.text(r'Recommenda', (0, .7, .2, .9)):
-            self.stop_with_evidence("Cannot identify the active Cubie: Recommendation is unreadable")
-        self.send_key('n')
+            # Full-screen OCR misses this small wrapped caption. The native
+            # focused crop reads it as Recommendatio after 2x enlargement.
+            boxes = self.ocr(0, .71, .11, .86, threshold=.65, target_height=2160)
+            if not any(re.search(r'Recommenda', b.name, re.I) for b in boxes):
+                self.stop_with_evidence("Cannot identify the active Cubie: Recommendation is unreadable")
+        # Click the circular icon above the verified caption, not its N glyph.
+        self.click_relative(.033, .76, after_sleep=.6)
         self.wait_screen({Screen.BUILD_GUIDE})
         cube = selected_build(self._texts)
         if not cube:

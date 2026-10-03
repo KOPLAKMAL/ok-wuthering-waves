@@ -84,11 +84,13 @@ character instead of always selecting Lynae. Story verifies its fixed character.
 | 5 | Lynae / Gold Hunter | Aemeath / Rapier |
 | 6 | — | Lynae / Gold Hunter |
 
-Resume from Store reads the active character using the observed Recommendation
-control and **N**. The user confirmed this opens the current character's guide.
+Resume from Store reads the active character by clicking the observed
+Recommendation icon. The user clarified that pressing N does nothing; mouse
+input is required. An enlarged caption crop handles labels missed by full OCR.
 The selected header name and role must agree, excluding the other four sidebar
 entries. Close the guide and return to Store before shopping. An already-open
-guide is reopened via N because the user may have selected another entry.
+guide is reopened by clicking Recommendation because the user may have selected
+another entry.
 Unreadable identity stops without assuming Rover or buying anything.
 
 `src/task/cubie_wars/items.json` contains 126 definitions from the Collection

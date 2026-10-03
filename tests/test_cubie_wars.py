@@ -31,6 +31,7 @@ LIVE_UNLOCK = json.loads((FIXTURES / 'live_new_warrior_ocr.json').read_text(enco
 LIVE_RIGHT_SWORD = json.loads((FIXTURES / 'live_right_sword_ocr.json').read_text(encoding='utf-8'))
 TUTORIAL_CASES = json.loads((FIXTURES / 'tutorial/ocr.json').read_text(encoding='utf-8'))
 BUILD_CASES = json.loads((FIXTURES / 'builds/ocr.json').read_text(encoding='utf-8'))
+RECOMMENDATION_CASES = json.loads((FIXTURES / 'recommendation_button_ocr.json').read_text())
 
 
 def build_texts(case):
@@ -60,7 +61,7 @@ def test_role_guide_needs_selected_header_and_matching_role(missing):
 
 
 @pytest.mark.parametrize('case', BUILD_CASES[:5], ids=lambda c: c['name'])
-def test_resume_reads_current_character_via_n_and_returns_to_store(case):
+def test_resume_clicks_recommendation_and_returns_to_store(case):
     task = make_task()
     task._cube = None
     task._texts = [Text('Recommendation', .025, .79)]
@@ -73,8 +74,9 @@ def test_resume_reads_current_character_via_n_and_returns_to_store(case):
     task.read_active_build()
     cube = case['name'].capitalize()
     assert task._cube == cube and task._role == CHAR_ROLES[cube]
-    task.send_key.assert_called_once_with('n')
-    task.click_relative.assert_called_once_with(.943, .06, after_sleep=.6)
+    task.send_key.assert_not_called()
+    assert [c.args for c in task.click_relative.call_args_list] == [
+        (.033, .76), (.943, .06)]
     assert [c.args[0] for c in task.wait_screen.call_args_list] == [
         {Screen.BUILD_GUIDE}, {Screen.SHOP}]
 
@@ -89,10 +91,10 @@ def test_unreadable_resume_build_stops_before_any_purchase():
     with pytest.raises(RuntimeError, match='active Cubie name and role'):
         task.read_active_build()
     assert task._cube is None
-    task.click_relative.assert_not_called()
+    task.click_relative.assert_called_once_with(.033, .76, after_sleep=.6)
 
 
-def test_resume_reopens_manual_guide_via_n_to_get_active_character():
+def test_resume_reopens_manual_guide_via_recommendation_to_get_active_character():
     task = make_task()
     task._cube = None
     task._texts = build_texts(BUILD_CASES[0])  # Manually selected Aemeath.
@@ -103,10 +105,45 @@ def test_resume_reopens_manual_guide_via_n_to_get_active_character():
     task.click_relative = MagicMock()
     task.read_active_build(already_open=True)
     assert task._cube == 'Hsin' and task._role == 'Traumatizer'
-    task.send_key.assert_called_once_with('n')
+    task.send_key.assert_not_called()
     assert [c.args[0] for c in task.wait_screen.call_args_list] == [
         {Screen.SHOP}, {Screen.BUILD_GUIDE}, {Screen.SHOP}]
-    assert task.click_relative.call_count == 2
+    assert [c.args for c in task.click_relative.call_args_list] == [
+        (.943, .06), (.033, .76), (.943, .06)]
+
+
+@pytest.mark.parametrize('case', RECOMMENDATION_CASES, ids=lambda c: c['image'])
+def test_focused_native_recommendation_caption_opens_guide_without_keyboard(case):
+    task = make_task()
+    task._cube = None
+    task._texts = []  # Full-screen OCR missed the caption in these captures.
+    task.executor.method.width, task.executor.method.height = 1920, 1080
+    task.executor.frame = cv2.imread(str(FIXTURES / case['image']))
+    task.ocr = MagicMock(return_value=[SimpleNamespace(**t) for t in case['texts']])
+    def ready(expected):
+        if expected == {Screen.BUILD_GUIDE}:
+            task._texts = build_texts(BUILD_CASES[0])
+    task.wait_screen = MagicMock(side_effect=ready)
+    task.click_relative = MagicMock()
+    task.read_active_build()
+    task.ocr.assert_called_once_with(0, .71, .11, .86, threshold=.65, target_height=2160)
+    task.send_key.assert_not_called()
+    assert task._cube == 'Aemeath'
+    assert [c.args for c in task.click_relative.call_args_list] == [
+        (.033, .76), (.943, .06)]
+
+
+def test_unreadable_recommendation_stops_before_clicking():
+    task = make_task()
+    task._cube = None
+    task._texts = []
+    task.ocr = MagicMock(return_value=[])
+    task.screenshot = MagicMock()
+    task.click_relative = MagicMock()
+    with pytest.raises(RuntimeError, match='Recommendation is unreadable'):
+        task.read_active_build()
+    task.click_relative.assert_not_called()
+    task.send_key.assert_not_called()
 
 
 @pytest.mark.parametrize('case,count', [(BUILD_CASES[5], 6), (BUILD_CASES[6], 5)],
@@ -531,7 +568,7 @@ def test_drop_requires_green_preview_and_rejects_collision():
 def make_task():
     task = CubieWarsTask(MagicMock(), MagicMock())
     # Existing shop/action fixtures start with a verified Rover build.
-    # Resume identity tests explicitly clear it to exercise N recovery.
+    # Resume identity tests clear it to exercise Recommendation recovery.
     task._cube = 'Rover'
     task.config = dict(task.default_config)
     task.executor.method.width = 1280
