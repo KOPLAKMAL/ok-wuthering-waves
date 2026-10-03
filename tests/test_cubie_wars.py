@@ -668,6 +668,7 @@ def make_task():
     task.mouse_up = MagicMock()
     task.send_key = MagicMock()
     task.rotate_held_item = MagicMock()
+    task.verify_sheet_added = MagicMock()
     # Placement tests below start after a verified pickup; test pickup itself
     # separately with failed presses, stale captures, and actual OCR fixtures.
     def picked_up(source):
@@ -909,7 +910,7 @@ def test_sheet_drag_uses_whole_footprint_plan_not_a_single_occupied_cell():
     task.executor.frame = before
     task.click_relative = MagicMock()
     shape = sheet_footprint('HP Bread Sheet')
-    with patch('src.task.CubieWarsTask.valid_sheet_preview', return_value=True), \
+    with patch('src.task.CubieWarsTask.valid_preview', side_effect=AssertionError('Sheet does not need green')), \
             patch('src.task.CubieWarsTask.placement_points') as old_points:
         assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, shape)
     old_points.assert_not_called()
@@ -933,9 +934,8 @@ def test_rotated_sheet_plan_rotates_before_trying_its_center():
     task = make_task()
     before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
     task.executor.frame = before
-    plan = SimpleNamespace(rotation=1, point=(.3, .4))
-    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]), \
-            patch('src.task.CubieWarsTask.valid_sheet_preview', return_value=True):
+    plan = SimpleNamespace(rotation=1, point=(.3, .4), origin=(0, 0))
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]):
         assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
     task.rotate_held_item.assert_called_once_with()
     task.send_key.assert_not_called()
@@ -943,20 +943,20 @@ def test_rotated_sheet_plan_rotates_before_trying_its_center():
     task.mouse_up.assert_called_once()
 
 
-def test_geometric_sheet_fit_with_failed_preview_is_not_reported_as_no_space():
+def test_known_sheet_fit_is_released_without_reading_any_preview_color():
     task = make_task()
     before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
     task.executor.frame = frame('invalid_ghost')
     task.screenshot = MagicMock()
-    plan = SimpleNamespace(rotation=0, point=(.3, .4))
+    plan = SimpleNamespace(rotation=0, point=(.3, .4), origin=(0, 0))
     with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]), \
-            patch('src.task.CubieWarsTask.preview_counts', return_value=(0, 1000)), \
-            patch('src.task.CubieWarsTask.valid_sheet_preview', return_value=False):
-        assert not task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
-    assert task._placement_reason == 'unknown'
-    task.send_key.assert_not_called()  # No more planned orientations.
+            patch('src.task.CubieWarsTask.preview_counts', side_effect=AssertionError('No color scan')), \
+            patch('src.task.CubieWarsTask.valid_preview', side_effect=AssertionError('No green required')):
+        assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
+    assert task._placement_reason == 'placed'
+    task.send_key.assert_not_called()
     task.mouse_up.assert_called_once()
-    task.move_relative.assert_called_with(*task.SHOP_SLOTS[2])
+    task.move_relative.assert_called_once_with(*plan.point)
 
 
 def thin_sheet_frames():
@@ -970,50 +970,104 @@ def thin_sheet_plan():
                           (924/1920, 252/1080), 2)
 
 
-def test_actual_thin_sheet_edges_release_after_first_stable_nudged_preview():
+def test_known_sheet_releases_at_first_computed_fit_without_nudging_or_scanning():
     task = make_task()
     before, held = thin_sheet_frames()
     task.executor.frame = before
-    captures = iter([before]*3+[held]*2)
-    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
     plan = thin_sheet_plan()
     with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]):
         assert task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
-    assert [c.args for c in task.move_relative.call_args_list] == [
-        plan.point, (948/1920, 268/1080)]
+    task.move_relative.assert_called_once_with(*plan.point)
     task.mouse_up.assert_called_once()
     task.send_key.assert_not_called()
-    assert task.next_frame.call_count == 5
+    task.next_frame.assert_not_called()
     assert task._placement_reason == 'placed'
 
 
-def test_one_thin_sheet_preview_then_disappearance_never_drops():
+def test_interrupted_direct_sheet_drop_returns_to_source_and_releases():
     task = make_task()
     before, held = thin_sheet_frames()
     task.executor.frame = before
-    captures = iter([before]*3+[held]+[before]*5)
-    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
+    task.sleep.side_effect = RuntimeError('Stopped')
     task.screenshot = MagicMock()
     with patch('src.task.CubieWarsTask.sheet_placements', return_value=[thin_sheet_plan()]):
-        assert not task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
+        with pytest.raises(RuntimeError, match='Stopped'):
+            task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
     task.move_relative.assert_called_with(*task.SHOP_SLOTS[1])
     task.mouse_up.assert_called_once()
     assert task._placement_reason == 'unknown'
 
 
-def test_thin_sheet_evidence_cannot_drop_an_item_when_hold_is_lost():
+def test_direct_sheet_drop_still_requires_verified_initial_pickup():
     task = make_task()
     before, held = thin_sheet_frames()
     task.executor.frame = held
-    task.drag_active.return_value = False
+    task.pick_up.return_value = False
+    task.pick_up.side_effect = None
     task.screenshot = MagicMock()
-    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[thin_sheet_plan()]), \
-            patch('src.task.CubieWarsTask.valid_sheet_preview') as preview:
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[thin_sheet_plan()]):
         assert not task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
-    preview.assert_not_called()
-    task.mouse_up.assert_called_once()
-    task.move_relative.assert_called_with(*task.SHOP_SLOTS[1])
-    assert task._placement_reason == 'lost_drag'
+    task.move_relative.assert_not_called()
+    task.mouse_up.assert_not_called()
+    assert task._placement_reason == 'not_picked_up'
+
+
+def test_sheet_book_expansion_confirmation_from_actual_before_and_after_captures():
+    task = make_task()
+    del task.verify_sheet_added
+    baseline = cv2.imread(str(FIXTURES/'sheet_geometry/board.png'))
+    task.executor.frame = thin_sheet_frames()[0]  # Recorded board after HP Bread purchase.
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.verify_sheet_added(baseline, sheet_footprint('HP Bread Sheet'))
+    task.observe.assert_called_once()
+
+
+def test_paid_sheet_without_book_expansion_is_not_treated_as_installed():
+    task = make_task()
+    del task.verify_sheet_added
+    baseline = cv2.imread(str(FIXTURES/'sheet_geometry/board.png'))
+    task.executor.frame = baseline.copy()
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='did not expand the book'):
+        task.verify_sheet_added(baseline, sheet_footprint('HP Bread Sheet'))
+    assert task.observe.call_count == 4
+
+
+@pytest.mark.parametrize('phase', ['coins', 'book'])
+def test_direct_sheet_purchase_verification_survives_tutorial(phase):
+    task = make_task()
+    baseline = cv2.imread(str(FIXTURES/'sheet_geometry/board.png'))
+    shape = sheet_footprint('HP Bread Sheet')
+    task._pending_sheet = {'baseline': baseline, 'footprint': shape, 'before': 8, 'after': None}
+    task.coins = MagicMock(side_effect=[ShopInterrupted(), 2] if phase == 'coins' else [2])
+    task.verify_sheet_added = MagicMock(side_effect=[ShopInterrupted(), None] if phase == 'book' else None)
+    with pytest.raises(ShopInterrupted):
+        task.complete_pending_sheet()
+    assert task._pending_sheet is not None
+    task.complete_pending_sheet()
+    assert task._pending_sheet is None
+    assert task.coins.call_count == (2 if phase == 'coins' else 1)
+    task.verify_sheet_added.assert_called_with(baseline, shape)
+
+
+def test_pending_sheet_verification_finishes_before_synthesis_or_new_shopping():
+    task = make_task()
+    task.config['Refreshes per round'] = 0
+    task.executor.frame = frame('shop')
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task._pending_sheet = {'baseline': task.frame.copy(), 'footprint': ((0, 0),), 'before': 8, 'after': 2}
+    events = []
+    task.verify_sheet_added = MagicMock(side_effect=lambda *args: events.append('verify'))
+    task.synthesize = MagicMock(side_effect=lambda: events.append('synthesize'))
+    task.coins = MagicMock(return_value=0)
+    task.number = MagicMock(return_value=(3, 6))
+    task.scan_recommendations = MagicMock(return_value=[False]*5)
+    task.text = MagicMock(return_value=None)
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='4')])
+    assert task.prepare_round()
+    assert events == ['verify', 'synthesize']
+    assert task._pending_sheet is None
 
 
 def test_three_missed_pickups_do_not_search_or_report_a_purchase():

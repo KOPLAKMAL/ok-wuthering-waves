@@ -15,7 +15,7 @@ from src.task.cubie_wars.model import (
 from src.task.cubie_wars.vision import (
     capacity_tag, crop, green_check, number_frame, placement_points, possible_recommendation,
     preview_counts, recipe_available, recommended_item, recommended_event,
-    sheet_placements, spotlight_target, stage_label_frame, valid_preview, valid_sheet_preview,
+    blank_board_cells, sheet_placements, spotlight_target, stage_label_frame, valid_preview,
     white_check, yellow_button,
 )
 
@@ -59,6 +59,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._placement_reason = 'unknown'
         self._guide_attempts = {}
         self._storage_pending = False
+        self._pending_sheet = None
 
     def validate_config(self, key, value):
         limits = {"Stage attempts": (1, 10), "Refreshes per round": (0, 20), "Session minutes": (1, 360)}
@@ -431,6 +432,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.sleep(1.5)
         if self.observe() != Screen.SHOP:
             return False
+        self.complete_pending_sheet()
         self.synthesize()
         for refresh in range(self.config.get("Refreshes per round", 4) + 1):
             skipped = set()
@@ -485,12 +487,17 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 baseline = self.frame.copy()
                 footprint = sheet_footprint(item.name) if item.sheet else None
                 placed = self.drag_to_book(self.SHOP_SLOTS[index], baseline, item.sheet, footprint)
+                if placed and item.sheet and footprint:
+                    self._pending_sheet = {'baseline': baseline, 'footprint': footprint,
+                                           'before': before, 'after': None}
                 self.sleep(.4)
                 self.next_frame()
                 after = self.coins()
                 if placed:
                     if after >= before:
                         self.stop_with_evidence("Item placement was not confirmed by a coin decrease")
+                    if item.sheet and footprint:
+                        self.complete_pending_sheet(after)
                     self.log_info(f"Cubie Wars: placed {item.name}, spent {before - after} coins")
                     self.synthesize()
                     if item.sheet:
@@ -620,21 +627,69 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.screenshot('cubie-wars-pickup-failed')
         return False
 
-    def drag_to_book(self, source, baseline, sheet=False, footprint=None):
+    def drop_planned_sheet(self, source, baseline, footprint):
+        """User-authorized release on a complete blank-grid fit, without green."""
         self._placement_reason = 'unknown'
-        by_rotation = {rotation: [] for rotation in range(4)}
-        sheet_plans = {}
+        plans = sheet_placements(baseline, footprint)
+        self.log_info(f"Cubie Wars: Sheet footprint {len(footprint)} cells, "
+                      f"{len(plans)} placements fit the blank board")
+        if not plans:
+            self._placement_reason = 'no_space'
+            return False
+        if not self.pick_up(source):
+            self._placement_reason = 'not_picked_up'
+            return False
+        plan = plans[0]
+        release_at_target = False
+        try:
+            for _ in range(plan.rotation):
+                self.rotate_held_item()
+                self.sleep(.12)
+            self.move_relative(*plan.point)
+            self.sleep(.3)
+            release_at_target = True
+        finally:
+            try:
+                if not release_at_target:
+                    self.move_relative(*source)
+            finally:
+                self.mouse_up()
+        self._placement_reason = 'placed'
+        self.log_info(f"Cubie Wars: released Sheet at computed fit {plan.origin}, "
+                      f"rotation {plan.rotation}; awaiting purchase confirmation")
+        return True
+
+    def complete_pending_sheet(self, after=None):
+        pending = self._pending_sheet
+        if pending is None:
+            return
+        if after is not None:
+            pending['after'] = after
+        if pending['after'] is None:
+            pending['after'] = self.coins()
+        if pending['after'] >= pending['before']:
+            self.stop_with_evidence("Sheet placement was not confirmed by a coin decrease")
+        self.verify_sheet_added(pending['baseline'], pending['footprint'])
+        self._pending_sheet = None
+
+    def verify_sheet_added(self, baseline, footprint):
+        # A coin decrease can also mean an item was purchased into Storage.
+        # Confirm that the book actually gained at least this many Sheet cells.
+        before_blank = blank_board_cells(baseline)
+        for attempt in range(4):
+            self.move_relative(.55, .78)
+            self.sleep(.25)
+            self.require_shop()
+            added = before_blank - blank_board_cells(self.frame)
+            if len(added) >= len(footprint):
+                return
+        self.stop_with_evidence("Sheet purchase did not expand the book; check the Storage Box")
+
+    def drag_to_book(self, source, baseline, sheet=False, footprint=None):
         if sheet and footprint:
-            plans = sheet_placements(baseline, footprint)
-            for plan in plans:
-                by_rotation[plan.rotation].append(plan.point)
-                sheet_plans[(plan.rotation, plan.point)] = plan
-            points = [plan.point for plan in plans]
-            self.log_info(f"Cubie Wars: Sheet footprint {len(footprint)} cells, "
-                          f"{len(plans)} placements fit the blank board")
-        else:
-            points = placement_points(baseline, sheet)
-            by_rotation = {rotation: points for rotation in range(4)}
+            return self.drop_planned_sheet(source, baseline, footprint)
+        self._placement_reason = 'unknown'
+        points = placement_points(baseline, sheet)
         if not points:
             self._placement_reason = 'no_space'
             return False
@@ -645,11 +700,10 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         best_preview = None
         best_counts = (-1, 0)
         all_blocked = True
-        last_rotation = max((r for r, candidates in by_rotation.items() if candidates), default=3)
         try:
             self.sleep(.15)
-            for rotation in range(last_rotation+1 if sheet and footprint else 4):
-                for point in by_rotation[rotation]:
+            for rotation in range(4):
+                for point in points:
                     if self._deadline and time.monotonic() > self._deadline:
                         self.stop_with_evidence("Cubie Wars session time limit reached during placement")
 
@@ -680,11 +734,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                                 self._placement_reason = 'lost_drag'
                                 self.screenshot('cubie-wars-drag-lost')
                                 return False  # finally returns/cancels and releases.
-                            if sheet and footprint:
-                                legal = held and valid_sheet_preview(
-                                    baseline, self.frame, sheet_plans[(rotation, point)], cursor_point)
-                            else:
-                                legal = held and valid_preview(baseline, self.frame)
+                            legal = held and valid_preview(baseline, self.frame)
                             consecutive = consecutive + 1 if legal else 0
                             if consecutive >= 2:
                                 placed = True
@@ -697,9 +747,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     all_blocked &= blocked
                 if placed:
                     break
-                if not (sheet and footprint) or rotation < last_rotation:
-                    self.rotate_held_item()
-                    self.sleep(.12)
+                self.rotate_held_item()
+                self.sleep(.12)
         finally:
             # Return to the shop source if no valid ghost was seen. Never drop
             # blindly, and always release even when Stop interrupts a drag.
@@ -711,9 +760,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         if placed:
             self._placement_reason = 'placed'
             return True
-        # A nonempty whole-footprint plan proves blank space exists. If its
-        # live preview fails, report verification failure rather than no room.
-        self._placement_reason = 'no_space' if all_blocked and not (sheet and footprint) else 'unknown'
+        self._placement_reason = 'no_space' if all_blocked else 'unknown'
         if self._placement_scans_saved < 8:
             self.screenshot("cubie-wars-placement-before", frame=crop(baseline, (.06, .09, .58, .76)).copy())
             if best_preview is not None:

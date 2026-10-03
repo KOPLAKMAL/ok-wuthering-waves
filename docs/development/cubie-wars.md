@@ -171,7 +171,7 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   The round-two coin-carryover highlight uses the same verified coin border.
   When combat shows 1x or 1.5x, advance and observe until 2x; never click 2x,
   which would cycle back. Stop if three clicks do not advance the control.
-- Test candidate positions in all four orientations, including empty tan
+- For items and unknown Sheet shapes, test candidate positions in all four orientations, including empty tan
   sheet cells. Hold each position for up to three captures and release after
   two consecutive green previews with no red collision cells. On failure or
   Stop, return to the source and always release, even if that move fails.
@@ -213,29 +213,40 @@ the whole shape's bounding-box center. Even-width shapes aim between cells.
 The 10:44 board has 20 occupied and 28 blank cells; HP Bread Sheet (2×3) has
 five valid geometric placements. Its preferred vertical plan starts at column
 1, row 3, with cursor center (414,609) in the 1920×1080 viewport. Bright
-obstructions are conservatively blocked. Unknown Sheet shapes retain probing
-of bare cells with live green-preview verification. A nonempty geometric plan
-whose preview fails is reported as unverifiable, not as proof of no space.
+obstructions are conservatively blocked. On October 4 the user explicitly
+authorized releasing known Sheets on a computed fit without waiting for green.
+After a verified pickup, rotate and move directly to the first fitting plan,
+wait briefly for movement to settle, then release. Do not nudge repeatedly or
+scan colors. The caller requires a coin decrease and confirms that the book
+gained at least the footprint's number of occupied cells, so a purchase into
+Storage is not treated as installed. Stop if either confirmation fails.
+Save pending verification immediately after release; if a tutorial interrupts
+either check, finish it upon returning to Store before synthesis or shopping.
+This pending record is in-process state and does not survive an app restart.
+Unknown Sheet shapes retain probing of bare cells with live green verification.
 
 The 10:43/10:44 lost-HP-Bread errors were false detections: the Sheet was still
 held, but actual OCR merged its control with the neighboring stamp as
 `Rotate Sold`. At 1440p on October 4 the mouse glyph also became `1Rotate` or
 `DRotate`; accept these observed icon prefixes and the combined label while
 rejecting tutorial sentences. The preserved native capture reproduces the
-error. Both geometric plans and combined-label handling remain subject to live
-drop validation; two stable green previews and a coin decrease are required.
+error. Pickup still requires two held-item observations; known Sheet drops
+follow the user-authorized geometric policy above. Other items require two
+stable green previews and a coin decrease.
 
 The 11:17 Empty Sheet capture exposed a separate preview issue: the Sheet
 sprite hides most green fill, leaving long thin strips. The generic item
 detector counted only 287 pixels, below its native threshold of 311, and lost
-the strips entirely at 1440p. Known Sheet plans now require all footprint cells
+the strips entirely at 1440p. A diagnostic Sheet verifier was added to require all footprint cells
 blank, four new orange corners aligned to the commanded cursor and shape,
 exposed changed green in multiple planned cells, and no meaningful red collision
 (including thin red strips). The dragged sprite's bounding box plus a two-pixel
 margin is excluded from green evidence so a green Rapier Sheet cannot prove
 legality using its own color. Orange alone is never enough. This specialized
 check also rejects stale previews at a previous target. Two consecutive held,
-valid samples are still required before release, followed by live coin checks.
+valid samples were required before release, followed by live coin checks. This
+diagnostic remains covered by replay tests, but the live known-Sheet path now
+uses the geometric release policy requested by the user and does not call it.
 The preserved positive and below-board negative crops are tested at 720p,
 1080p and 1440p; their unobserved exterior is explicitly zero-filled.
 
@@ -291,7 +302,8 @@ and the capacity guard before buying. Live purchase still needs verification.
   and event choices need live validation. The task currently adds items to free
   slots; it does not solve a global inventory rearrangement or replacement plan.
   Signature Weapon limits are separate from weight capacity; the planner does
-  not yet model that counter. Placement still requires a valid green preview.
+  not yet model that counter. Item placement and unknown Sheet shapes still
+  require a valid green preview; known Sheets use the explicit geometric policy.
 - Stage 6 can fail even with legal placements. Stop on the configured attempt
   limit and inspect the build; an offline test does not prove a winning strategy.
 - English is the only observed game language. Translated application labels do
