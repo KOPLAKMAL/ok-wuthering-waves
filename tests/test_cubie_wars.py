@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -25,6 +26,7 @@ CASES = json.loads((FIXTURES / 'ocr.json').read_text(encoding='utf-8'))
 LIVE_HOVER = json.loads((FIXTURES / 'live_hover_ocr.json').read_text(encoding='utf-8'))
 LIVE_SYNTHESIS = json.loads((FIXTURES / 'live_synthesis_modal_ocr.json').read_text(encoding='utf-8'))
 LIVE_PERSISTENT_ITEM = json.loads((FIXTURES / 'live_persistent_item_ocr.json').read_text(encoding='utf-8'))
+LIVE_UNLOCK = json.loads((FIXTURES / 'live_new_warrior_ocr.json').read_text(encoding='utf-8'))
 
 
 def frame(name):
@@ -34,6 +36,82 @@ def frame(name):
 @pytest.mark.parametrize('case', CASES, ids=lambda case: case['name'])
 def test_recording_screen_recognition(case):
     assert classify([Text(**t) for t in case['texts']]) == Screen[case['expected']]
+
+
+def test_live_new_warrior_popup_recognition_requires_header_and_close_prompt():
+    texts = [Text(**t) for t in LIVE_UNLOCK]
+    assert classify(texts) == Screen.UNLOCK
+    assert classify([t for t in texts if 'New' not in t.name]) == Screen.UNKNOWN
+    assert classify([t for t in texts if 'close' not in t.name]) == Screen.UNKNOWN
+
+
+def final_synthesis_guide():
+    # Navigation positions come from the recorded guide. Page text comes from
+    # the live Quick Synthesis tutorial that was UNKNOWN before manual Confirm.
+    controls = [Text(**t) for t in next(c for c in CASES if c['name'] == 'guide')['texts']
+                if t['name'] in {'A', 'D', 'Confirm'}]
+    return controls + [Text('Quick Synthesis', .07, .29),
+                       Text('The Quick Synthesis list shows all Items available for synthesis,', .03, .37),
+                       Text('saving you the hassle of dragging Items next to each other.', .03, .41)]
+
+
+def test_final_synthesis_guide_is_recognized_without_earlier_page_phrases():
+    assert classify(final_synthesis_guide()) == Screen.GUIDE
+    assert classify([t for t in final_synthesis_guide() if t.name not in {'A', 'D'}]) == Screen.UNKNOWN
+
+
+def test_final_guide_clicks_confirm_instead_of_forward():
+    task = make_task()
+    task._texts = final_synthesis_guide()
+    task.click_relative = MagicMock()
+    task.handle_guide()
+    confirm = next(t for t in task._texts if t.name == 'Confirm')
+    task.click_relative.assert_called_once_with(*confirm.center, after_sleep=.6)
+
+
+def test_guide_stops_repeating_same_page_even_if_demo_numbers_change():
+    task = make_task()
+    task._texts = [t for t in final_synthesis_guide() if t.name != 'Confirm']
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    for number in range(3):
+        task._texts.append(Text(str(number), .7, .3))
+        task.handle_guide()
+    with pytest.raises(RuntimeError, match='page did not advance after three clicks'):
+        task.handle_guide()
+    assert task.click_relative.call_count == 3
+    assert all(call.args == (.745, .806) for call in task.click_relative.call_args_list)
+
+
+def test_guide_without_readable_navigation_stops_before_clicking():
+    task = make_task()
+    task._texts = [Text('Quick Synthesis', .07, .29)]
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='tutorial navigation is unreadable'):
+        task.handle_guide()
+    task.click_relative.assert_not_called()
+
+
+def test_wait_for_stage_list_dismisses_new_warrior_popup():
+    task = make_task()
+    task._deadline = time.monotonic() + 60
+    task.observe = MagicMock(side_effect=[Screen.UNLOCK, Screen.UNLOCK, Screen.STAGES])
+    task.click_relative = MagicMock()
+    assert task.wait_screen({Screen.STAGES}) == Screen.STAGES
+    assert task.click_relative.call_count == 2
+    assert all(call.args == (.5, .9) for call in task.click_relative.call_args_list)
+
+
+def test_new_warrior_popup_that_does_not_close_has_bounded_retries():
+    task = make_task()
+    task._deadline = time.monotonic() + 60
+    task.observe = MagicMock(return_value=Screen.UNLOCK)
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='popup did not close after three clicks'):
+        task.wait_screen({Screen.STAGES})
+    assert task.click_relative.call_count == 3
 
 
 def test_stage_six_is_required_for_astrite():
@@ -555,7 +633,7 @@ def test_unreadable_resource_still_stops_after_bounded_retries():
     assert task.ocr.call_count == 4
 
 
-@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SYNTHESIS])
+@pytest.mark.parametrize('screen', [Screen.GUIDE, Screen.SYNTHESIS, Screen.UNLOCK, Screen.STAGES])
 def test_resume_story_rejoins_stage_verification_and_rewards(screen):
     task = make_task()
     task.config['Mode'] = 'Resume Story stage'
@@ -569,7 +647,12 @@ def test_resume_story_rejoins_stage_verification_and_rewards(screen):
     with patch('src.task.CubieWarsTask.is_admin', return_value=True), \
             patch('src.task.CubieWarsTask.WWOneTimeTask.run'):
         task.run()
-    task.play_stage.assert_called_once_with('Story')
+    if screen in {Screen.UNLOCK, Screen.STAGES}:
+        task.play_stage.assert_not_called()
+    else:
+        task.play_stage.assert_called_once_with('Story')
+    task.wait_screen.assert_called_once_with({Screen.STAGES})
+    task.close_page.assert_called_once()
     assert [call.args for call in task.complete_mode.call_args_list] == [('Story',), ('Adventure',)]
     task.claim_rewards.assert_called_once()
 
@@ -1026,6 +1109,8 @@ def test_late_coin_tutorial_interrupts_refresh_even_when_resources_are_readable(
     task.screenshot = MagicMock()
     task.coins = MagicMock(return_value=11)
     task.number = MagicMock(side_effect=lambda region, fraction=False: (3, 7) if fraction else 1)
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='1')])
+    task.shop_item = MagicMock(return_value=Item('Crystal', 'Adventurer', False, 0, 0, 1, '', 'Accessory'))
     task.click_relative = MagicMock()
     with pytest.raises(ShopInterrupted):
         task.prepare_round()
@@ -1092,9 +1177,9 @@ def test_recorded_item_categories(case):
     assert not re.search(r'\d+/\d+', item.name)
 
 
-def test_purchase_order_is_weapon_sheet_accessory_relic_item():
+def test_purchase_order_is_sheet_weapon_accessory_relic_item():
     ordered = [Item(kind, 'Adventurer', kind == 'Sheet', 0, 0, 1, '', kind)
-               for kind in ('Weapon', 'Sheet', 'Accessory', 'Relic', 'Item')]
+               for kind in ('Sheet', 'Weapon', 'Accessory', 'Relic', 'Item')]
     ranks = [item.purchase_rank('Adventurer', 6, 5, 1) for item in ordered]
     assert ranks == sorted(ranks, reverse=True)
     full = Item('Sword', 'Rapier', False, 3, 6, 2, '', 'Weapon')
@@ -1107,7 +1192,7 @@ def test_accessory_category_is_read_from_header_not_weapon_text_in_description()
     assert item.category == 'Accessory' and item.cost == 0
 
 
-def test_shop_attempts_recommended_weapons_before_sheets_and_accessories():
+def test_shop_attempts_unmarked_sheets_then_weapons_then_recommended_accessories():
     task = make_task()
     task.executor.frame = frame('live_shop')
     task.config['Refreshes per round'] = 0
@@ -1119,13 +1204,13 @@ def test_shop_attempts_recommended_weapons_before_sheets_and_accessories():
                          [] if args == (.2, .075, .68, .7) else [SimpleNamespace(name='3')])
     task.drag_to_book = MagicMock(return_value=False)
     task._placement_reason = 'no_space'
-    items = {x: Item(kind, 'Adventurer', kind == 'Sheet', 0, 0, 1, '', kind)
-             for x, kind in zip((.636, .766, .895), ('Weapon', 'Sheet', 'Accessory'))}
-    with patch('src.task.CubieWarsTask.recommended_item', side_effect=lambda image, point: point[1] == .392), \
-            patch('src.task.CubieWarsTask.parse_item', side_effect=lambda texts:
-                  items[task.move_relative.call_args.args[0]]):
-        assert task.prepare_round() is True
-    assert [call.args[0] for call in task.drag_to_book.call_args_list] == list(task.SHOP_SLOTS[:3])
+    kinds = ['Weapon', 'Sheet', 'Accessory', 'Relic', 'Item']
+    task.shop_item = MagicMock(side_effect=lambda index:
+                              Item(kinds[index], 'Adventurer', kinds[index] == 'Sheet', 0, 0, 1, '', kinds[index]))
+    task.scan_recommendations = MagicMock(return_value=[False, False, True, False, False])
+    assert task.prepare_round() is True
+    assert [call.args[0] for call in task.drag_to_book.call_args_list] == [
+        task.SHOP_SLOTS[1], task.SHOP_SLOTS[0], task.SHOP_SLOTS[2]]
 
 
 @pytest.mark.parametrize('reason,message', [('unknown', 'legal placement'),
@@ -1149,30 +1234,32 @@ def test_unreadable_placement_stops_before_rerolling_recommended_item(reason, me
     task.click_relative.assert_not_called()
 
 
-def test_sheet_purchase_retries_weapon_that_previously_did_not_fit():
+def test_sheet_purchase_expands_capacity_before_buying_unmarked_weapon():
     task = make_task()
     task.executor.frame = frame('live_shop')
     task.config['Refreshes per round'] = 0
     task.observe = MagicMock(return_value=Screen.SHOP)
     task.synthesize = MagicMock()
     # Resource readings before/after each drag, including rescans after buys.
-    task.coins = MagicMock(side_effect=[6, 6, 6, 6, 6, 5, 5, 5, 4, 4])
-    task.number = MagicMock(return_value=(3, 6))
+    task.coins = MagicMock(side_effect=[6, 6, 5, 5, 5, 4, 4])
+    bought = []
+    task.number = MagicMock(side_effect=lambda *args, **kwargs: (3, 6 if bought else 3))
     task.ocr = MagicMock(return_value=[SimpleNamespace(name='1')])
-    weapon = Item('Sword', 'Adventurer', False, 0, 0, 1, '', 'Weapon')
+    weapon = Item('Sword', 'Adventurer', False, 3, 6, 2, '', 'Weapon')
     sheet = Item('Sheet', 'Adventurer', True, 0, 0, 1, '', 'Sheet')
     task.shop_item = MagicMock(side_effect=lambda index: weapon if index == 0 else sheet)
-    task.scan_recommendations = MagicMock(side_effect=[
-        [True, True, False, False, False], [True, True, False, False, False],
-        [True, False, False, False, False], [False] * 5])
-    task._placement_reason = 'no_space'
-    task.drag_to_book = MagicMock(side_effect=[False, True, True])
+    def scan():
+        task._texts = [Text('Sold', *task.SHOP_SLOTS[i]) for i in range(5)
+                       if i >= 2 or task.SHOP_SLOTS[i] in bought]
+        return [False] * 5
+    task.scan_recommendations = MagicMock(side_effect=scan)
+    task.drag_to_book = MagicMock(side_effect=lambda source, *args: bought.append(source) or True)
     assert task.prepare_round() is True
     assert [call.args[0] for call in task.drag_to_book.call_args_list] == [
-        task.SHOP_SLOTS[0], task.SHOP_SLOTS[1], task.SHOP_SLOTS[0]]
+        task.SHOP_SLOTS[1], task.SHOP_SLOTS[0]]
 
 
-def test_no_thumb_skips_tooltips_and_refreshes_before_combat():
+def test_unmarked_accessories_are_inspected_but_not_bought_before_refresh():
     task = make_task()
     task.executor.frame = frame('live_shop')
     task.config['Refreshes per round'] = 2
@@ -1180,11 +1267,12 @@ def test_no_thumb_skips_tooltips_and_refreshes_before_combat():
     task.synthesize = MagicMock()
     task.coins = MagicMock(side_effect=[6, 6, 5, 5, 5, 4, 4])
     task.number = MagicMock(side_effect=lambda region, fraction=False: (3, 6) if fraction else 1)
-    task.ocr = MagicMock()
+    task.ocr = MagicMock(return_value=[SimpleNamespace(name='1')])
+    task.shop_item = MagicMock(return_value=Item('Crystal', 'Adventurer', False, 0, 0, 1, '', 'Accessory'))
     task.drag_to_book = MagicMock()
     task.click_relative = MagicMock()
     assert task.prepare_round() is True
-    task.ocr.assert_not_called()
+    assert task.shop_item.call_count == 15
     task.drag_to_book.assert_not_called()
     assert task.click_relative.call_count == 2
     assert all(call.args == (.895, .574) for call in task.click_relative.call_args_list)

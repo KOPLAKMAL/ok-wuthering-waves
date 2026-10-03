@@ -53,6 +53,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._shop_scans_saved = 0
         self._placement_scans_saved = 0
         self._placement_reason = 'unknown'
+        self._guide_attempts = {}
 
     def validate_config(self, key, value):
         limits = {"Stage attempts": (1, 10), "Refreshes per round": (0, 20), "Session minutes": (1, 360)}
@@ -66,6 +67,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._spotlight_attempts = {}
         self._shop_scans_saved = 0
         self._placement_scans_saved = 0
+        self._guide_attempts = {}
         screen = self.observe()
         if self.config.get("Mode") == "Inspect screen":
             self.screenshot("cubie-wars-inspection")
@@ -75,7 +77,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
         resume_story = self.config.get("Mode") == "Resume Story stage"
         if resume_story:
-            if screen not in {Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.SYNTHESIS, Screen.MATCHING,
+            if screen not in {Screen.UNLOCK, Screen.STAGES, Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.SYNTHESIS, Screen.MATCHING,
                               Screen.COMBAT, Screen.ROUND_RESULT, Screen.STAGE_RESULT, Screen.EVENT}:
                 self.stop_with_evidence("Open the active Story stage before choosing Resume Story stage")
         elif screen != Screen.HUB:
@@ -85,7 +87,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         with cubie_cursor(self.executor):
             WWOneTimeTask.run(self)
             if resume_story:
-                self.play_stage("Story")
+                if screen not in {Screen.UNLOCK, Screen.STAGES}:
+                    self.play_stage("Story")
                 self.wait_screen({Screen.STAGES})
                 self.close_page()
             if resume_story or self.config.get("Mode") == "Astrite run":
@@ -111,10 +114,17 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def wait_screen(self, expected, timeout=20):
         expected = set(expected)
         deadline = min(self._deadline, time.monotonic() + timeout)
+        unlock_clicks = 0
         while time.monotonic() < deadline:
             screen = self.observe()
             if screen in expected:
                 return screen
+            if screen == Screen.UNLOCK:
+                if unlock_clicks >= 3:
+                    self.stop_with_evidence('New Cubie Warrior popup did not close after three clicks')
+                self.click_relative(.5, .9, after_sleep=.6)
+                unlock_clicks += 1
+                continue
             self.sleep(.5)
         self.stop_with_evidence("Cubie Wars screen did not change to " + ", ".join(s.value for s in expected))
 
@@ -190,10 +200,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             if screen == Screen.SPOTLIGHT:
                 self.handle_spotlight()
             elif screen == Screen.GUIDE:
-                if self.text(r"^Confirm$", (.3, .8, .7, 1)):
-                    self.click_text(r"^Confirm$", (.3, .8, .7, 1))
-                else:
-                    self.click_relative(.745, .806, after_sleep=.5)
+                self.handle_guide()
             elif screen == Screen.DETAILS:
                 self.click_relative(.935, .19, after_sleep=.6)
             elif screen == Screen.CUBE:
@@ -363,7 +370,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             if item and item.category:
                 return item
             self.require_shop(allow_tooltip=True)
-        self.stop_with_evidence(f"Recommended slot {index + 1} tooltip is unreadable; "
+        self.stop_with_evidence(f"Shop slot {index + 1} tooltip is unreadable; "
                                 "stopped before spending coins on refresh")
 
     def prepare_round(self):
@@ -384,11 +391,13 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 free = len(placement_points(self.frame))
                 offers = []
                 recommended = self.scan_recommendations()
+                sold = [bool(self.text(r'^Sold$', (x - .07, y - .11, x + .07, y + .11)))
+                        for x, y in self.SHOP_SLOTS]
                 self.log_info(f"Cubie Wars: recommended shop slots "
                               f"{[index + 1 for index, marked in enumerate(recommended) if marked]}, "
                               f"coins {coins}, capacity {used}/{maximum}")
                 for index, (x, y) in enumerate(self.SHOP_SLOTS):
-                    if index in skipped or not recommended[index]:
+                    if index in skipped or sold[index]:
                         continue
                     price_y = .392 if index < 3 else .64
                     price_boxes = self.ocr(x - .015, price_y - .021, x + .007, price_y + .02,
@@ -396,13 +405,14 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     price_text = " ".join(b.name for b in price_boxes)
                     price_match = re.fullmatch(r"\s*(\d{1,2})\s*", price_text)
                     if not price_match:
-                        self.stop_with_evidence(f"Recommended slot {index + 1} price is unreadable; "
+                        self.stop_with_evidence(f"Shop slot {index + 1} price is unreadable; "
                                                 "stopped before spending coins on refresh")
                     price = int(price_match[1])
                     if not 0 < price <= coins:
                         continue
                     item = self.shop_item(index)
-                    rank = item.purchase_rank(self._role, maximum - used, free, price)
+                    allowed = recommended[index] or item.category in {'Sheet', 'Weapon'}
+                    rank = item.purchase_rank(self._role, maximum - used, free, price) if allowed else None
                     self.log_info(f"Cubie Wars: slot {index + 1} {item.name} ({item.category}), "
                                   f"price {price}, eligible {rank is not None}")
                     if rank is not None:
@@ -441,7 +451,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     self.stop_with_evidence(f"Could not verify a legal placement for {item.name}; "
                                             "stopped before spending coins on refresh")
                 else:
-                    self.log_info(f"Cubie Wars: {item.name} does not fit; checking other recommended items")
+                    self.log_info(f"Cubie Wars: {item.name} does not fit; checking other items")
             if refresh < self.config.get("Refreshes per round", 4):
                 self.move_relative(.55, .78)
                 self.sleep(.25)
@@ -458,6 +468,24 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 if self.coins() != before - refresh_price:
                     self.stop_with_evidence("Shop refresh coin change did not match its price")
         return True
+
+    def handle_guide(self):
+        confirm = self.text(r'^Confirm$', (.3, .8, .7, 1))
+        forward = self.text(r'^D$', (.65, .7, .83, .87))
+        if not confirm and not forward:
+            self.stop_with_evidence('Cubie Wars tutorial navigation is unreadable')
+        # Only tutorial text defines the page; animated demo numbers can change
+        # while the page is stuck. Stop repeating the same action after 3 tries.
+        page = tuple(t.name for t in self._texts if t.center[0] < .5 and .2 < t.center[1] < .6)
+        key = ('Confirm' if confirm else 'D', page)
+        attempts = self._guide_attempts.get(key, 0)
+        if attempts >= 3:
+            self.stop_with_evidence('Cubie Wars tutorial page did not advance after three clicks')
+        self._guide_attempts[key] = attempts + 1
+        if confirm:
+            self.click_relative(*confirm.center, after_sleep=.6)
+        else:
+            self.click_relative(.745, .806, after_sleep=.6)
 
     def handle_spotlight(self):
         instruction = spotlight_instruction(self._texts)

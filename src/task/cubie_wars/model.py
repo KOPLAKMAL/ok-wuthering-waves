@@ -29,6 +29,7 @@ class Screen(Enum):
     PURCHASE = "Purchase confirmation"
     RECEIPT = "Items obtained"
     SYNTHESIS = "Quick synthesis"
+    UNLOCK = "New Cubie Warrior"
 
 
 @dataclass(frozen=True)
@@ -56,9 +57,14 @@ def classify(texts):
 
     if has(r"Items Obtained", (.3, .1, .75, .4)):
         return Screen.RECEIPT
+    if has(r'New Cu[bh]ie Warrior.*reporting for duty', (.15, .15, .85, .4)) and has(
+            r'Click anywhere to close', (.3, .8, .7, 1)):
+        return Screen.UNLOCK
     if has(r"Astrite", (.2, .15, .8, .8)) and has(r"^Confirm$", (.2, .5, .85, .95)) and has(r"^Cancel$"):
         return Screen.PURCHASE
-    if has(r"Turn to the last page|Items must be placed entirely|Items placed in the Storybook"):
+    if has(r"Turn to the last page|Items must be placed entirely|Items placed in the Storybook") or (
+            has(r'^Confirm$', (.3, .8, .7, 1))
+            and has(r'^A$', (.2, .7, .4, .87)) and has(r'^D$', (.65, .7, .83, .87))):
         return Screen.GUIDE
     if spotlight_instruction(texts):
         return Screen.SPOTLIGHT
@@ -129,7 +135,7 @@ ROLES = ("Adventurer", "Rapier", "Traumatizer", "Heavy Hitter", "Gold Hunter")
 ASTRITE_TOTAL = 1200
 STORE_OFFERS = ((50, 200), (50, 200), (100, 500), (100, 500))
 MILESTONES = (250, 750)
-CATEGORY_PRIORITY = {'Weapon': 0, 'Sheet': 1, 'Accessory': 2, 'Relic': 3, 'Item': 4}
+CATEGORY_PRIORITY = {'Sheet': 0, 'Weapon': 1, 'Accessory': 2, 'Relic': 3, 'Item': 4}
 
 
 def next_stage(mode, checks):
