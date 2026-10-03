@@ -25,8 +25,10 @@ administrator privileges. This prevents silent clicks against an elevated game;
 input-free inspection still works without elevation.
 
 During active Cubie Wars runs with the native PostMessage backend, a temporary
-adapter brings the game to the foreground and moves the real cursor through
-the framework's PyDirect cursor method. Keep the mouse free while it runs.
+adapter brings the game to the foreground. Hover uses the framework's PyDirect
+cursor method; held movement uses native SendInput, matching its native press,
+with coordinates converted through the capture's window offsets. Keep the
+mouse free while it runs.
 The usual PostMessage backend is restored on completion, error, or Stop.
 Inspection does not install this adapter or move the cursor.
 
@@ -51,6 +53,12 @@ clicks without advancing stops with a screenshot. The refresh border may join
 the shop price line; Start's border may be clipped at the bottom of the viewport.
 Both cases still require the visible straight yellow edges. Other tutorial
 instructions still need observation and live validation.
+The 10:22 Storage guide appeared during synthesis preparation: its initial
+native capture was entirely blurred, with no readable UI. Eight bounded reads
+allow a transient Unknown frame to settle before synthesis/shop checks. The
+settled Displaying Storage Box page already classifies as Guide and returns to
+the tutorial handler. No recipe or purchase is clicked while these reads remain
+Unknown; a persistent Unknown still stops. Tests replay both actual frames.
 The two drag instructions are introductory click-through overlays in the
 recording: the highlighted shop item and then the Sheet are clicked before
 normal purchasing begins. They do not initiate a purchase themselves.
@@ -213,6 +221,17 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   clear inline selections through the Storage area. Resume Story stage accepts
   an already-open synthesis panel. Capture/OCR fixtures cover the real modal;
   actual crafting and subsequent placement remain pending live validation.
+  If a tutorial interrupts after an upgrade click, retain pending Storage
+  restoration in the running task and retry it after Store is reacquired,
+  before shopping or selecting another recipe. Verify Store before inspecting
+  Storage so tutorial illustrations cannot be mistaken for stored weapons.
+  This pending flag is in-process state and does not survive an app restart.
+- Stop searching cells or rotating when three consecutive placement captures
+  no longer show the held-item Rotate control. Cancel/return and release before
+  reporting the lost drag; do not spend coins on refresh. Held movement now
+  uses the same SendInput path as pressing, instead of SetCursorPos. The 10:21
+  log confirms successful Sheet/Crystal purchases with the previous backend;
+  this consistency change is not proof of the intermittent cause or a live fix.
 
 ## Current limitations / live validation still required
 

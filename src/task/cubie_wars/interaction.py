@@ -27,12 +27,14 @@ class CubieWarsInteraction(PostMessageInteraction):
 
     def move(self, x, y, down_btn=0):
         self.try_activate()
-        self.cursor.move(x, y)
         if self.held_button:
-            # A native drag must also have a native held-button state. Mixing
-            # physical movement with posted MK_LBUTTON leaves GetAsyncKeyState
-            # released and sends conflicting mouse events to Unreal.
+            # PyDirect.move uses SetCursorPos, while its press uses SendInput.
+            # Deliver held movement through SendInput too so the game receives
+            # actual mouse motion, with the capture's window offsets applied.
+            x, y = self.capture.get_abs_cords(x, y)
+            pydirectinput.moveTo(x, y, _pause=False)
             return None
+        self.cursor.move(x, y)
         return super().move(x, y, down_btn=down_btn or self.held_button)
 
     def mouse_down(self, x=-1, y=-1, name=None, key="left"):

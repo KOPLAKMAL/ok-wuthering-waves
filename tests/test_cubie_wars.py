@@ -32,6 +32,7 @@ LIVE_RIGHT_SWORD = json.loads((FIXTURES / 'live_right_sword_ocr.json').read_text
 TUTORIAL_CASES = json.loads((FIXTURES / 'tutorial/ocr.json').read_text(encoding='utf-8'))
 BUILD_CASES = json.loads((FIXTURES / 'builds/ocr.json').read_text(encoding='utf-8'))
 RECOMMENDATION_CASES = json.loads((FIXTURES / 'recommendation_button_ocr.json').read_text())
+STORAGE_GUIDE = json.loads((FIXTURES / 'storage_guide/ocr.json').read_text())
 
 
 def build_texts(case):
@@ -541,6 +542,90 @@ def test_tutorial_after_synthesis_defers_storage_and_resource_reads(screen):
     task.number.assert_not_called()
 
 
+def test_real_storage_guide_transition_defers_synthesis_until_tutorial_settles():
+    transition = [Text(**t) for t in STORAGE_GUIDE['transition']['texts']]
+    settled = [Text(**t) for t in STORAGE_GUIDE['settled']['texts']]
+    assert classify(transition) == Screen.UNKNOWN
+    assert classify(settled) == Screen.GUIDE
+    task = make_task()
+    captures = iter([transition, transition, settled])
+    def observe():
+        task._texts = next(captures)
+        return classify(task._texts)
+    task.observe = MagicMock(side_effect=observe)
+    task.click_relative = MagicMock()
+    task.number = MagicMock()
+    with pytest.raises(ShopInterrupted):
+        task.synthesize()
+    assert task.observe.call_count == 3
+    task.click_relative.assert_not_called()
+    task.number.assert_not_called()
+
+
+def test_unknown_synthesis_screen_retries_but_stops_without_clicking():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.UNKNOWN)
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='changed before synthesis'):
+        task.synthesize()
+    assert task.observe.call_count == 8
+    task.click_relative.assert_not_called()
+
+
+def test_tutorial_transition_after_opening_recipe_defers_synthesize_click():
+    task = make_task()
+    task.observe = MagicMock(side_effect=[Screen.SHOP, Screen.UNKNOWN, Screen.GUIDE])
+    task.executor.frame = frame('synthesis_book')
+    task.click_relative = MagicMock()
+    task.number = MagicMock()
+    with patch('src.task.CubieWarsTask.recipe_available', return_value=True):
+        with pytest.raises(ShopInterrupted):
+            task.synthesize()
+    task.click_relative.assert_called_once_with(.058, .267, after_sleep=.35)
+    task.number.assert_not_called()
+
+
+def test_shop_transition_to_storage_guide_defers_actions():
+    task = make_task()
+    task.observe = MagicMock(side_effect=[Screen.UNKNOWN, Screen.GUIDE])
+    task.click_relative = MagicMock()
+    with pytest.raises(ShopInterrupted):
+        task.require_shop()
+    task.click_relative.assert_not_called()
+
+
+def test_upgrade_interrupted_by_tutorial_restores_storage_after_rejoining_shop():
+    task = make_task()
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_synthesis_modal.png'))
+    task._texts = [Text(**t) for t in LIVE_SYNTHESIS]
+    task.observe = MagicMock(side_effect=[Screen.SYNTHESIS, Screen.GUIDE])
+    task.click_relative = MagicMock()
+    task.restore_storage = MagicMock()
+    with pytest.raises(ShopInterrupted):
+        task.synthesize()
+    assert task._storage_pending
+    task.restore_storage.assert_not_called()
+    task.observe = MagicMock(return_value=Screen.SHOP)
+    task.executor.frame = frame('shop')
+    with patch('src.task.CubieWarsTask.recipe_available', return_value=False):
+        task.synthesize()
+    task.restore_storage.assert_called_once()
+    assert not task._storage_pending
+    assert task.click_relative.call_count == 1  # Never repeat the upgrade.
+
+
+def test_storage_restoration_waits_for_tutorial_before_reading_demo_items():
+    task = make_task()
+    task.observe = MagicMock(side_effect=[Screen.UNKNOWN, Screen.GUIDE])
+    task.ocr = MagicMock()
+    task.number = MagicMock()
+    with pytest.raises(ShopInterrupted):
+        task.restore_storage()
+    task.ocr.assert_not_called()
+    task.number.assert_not_called()
+
+
 def test_unclosable_synthesis_panel_stops_without_reading_resources():
     task = make_task()
     task.observe = MagicMock(return_value=Screen.SYNTHESIS)
@@ -792,9 +877,11 @@ def test_green_hover_card_cannot_confirm_placement_after_drag_is_lost():
     task.screenshot = MagicMock()
     with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]):
         assert not task.drag_to_book(task.SHOP_SLOTS[3], before)
-    assert task._placement_reason == 'unknown'
+    assert task._placement_reason == 'lost_drag'
     task.move_relative.assert_called_with(*task.SHOP_SLOTS[3])
     task.mouse_up.assert_called_once()
+    task.send_key.assert_not_called()
+    assert task.drag_active.call_count == 3
 
 
 def test_stop_during_drag_still_releases_mouse():

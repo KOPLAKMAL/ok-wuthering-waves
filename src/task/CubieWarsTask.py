@@ -57,6 +57,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self._placement_scans_saved = 0
         self._placement_reason = 'unknown'
         self._guide_attempts = {}
+        self._storage_pending = False
 
     def validate_config(self, key, value):
         limits = {"Stage attempts": (1, 10), "Refreshes per round": (0, 20), "Session minutes": (1, 360)}
@@ -359,11 +360,11 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.sleep(.3)
 
     def require_shop(self, allow_tooltip=False):
-        screen = self.observe()
+        screen = self.settled_screen()
         if (screen == Screen.ITEM_TOOLTIP and not allow_tooltip
                 and self.text(r'Click anywhere to close', (.2, .25, .85, .8))):
             self.clear_item_info()
-            screen = self.observe()
+            screen = self.settled_screen()
         if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
             raise ShopInterrupted()
         if screen != Screen.SHOP and not (allow_tooltip and screen == Screen.ITEM_TOOLTIP):
@@ -497,6 +498,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     self.stop_with_evidence("Cancelled drag changed coins; check the Storage Box before continuing")
                 elif self._placement_reason == 'not_picked_up':
                     self.stop_with_evidence(f"Could not pick up {item.name} after three attempts; "
+                                            "stopped before spending coins on refresh")
+                elif self._placement_reason == 'lost_drag':
+                    self.stop_with_evidence(f"Lost the held item {item.name} during placement; "
                                             "stopped before spending coins on refresh")
                 elif self._placement_reason != 'no_space':
                     self.stop_with_evidence(f"Could not verify a legal placement for {item.name}; "
@@ -633,6 +637,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                             self.stop_with_evidence("Cubie Wars session time limit reached during placement")
                         self.move_relative(point[0] + dx, point[1] + dy)
                         consecutive = 0
+                        not_held = 0
                         # Keep the cursor still and require two legal previews;
                         # WGC can return an older frame just after movement.
                         for sample in range(3):
@@ -642,7 +647,13 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                             if (green, -red) > best_counts:
                                 best_counts = (green, -red)
                                 best_preview = self.frame.copy()
-                            legal = valid_preview(baseline, self.frame) and self.drag_active()
+                            held = self.drag_active()
+                            not_held = 0 if held else not_held + 1
+                            if not_held >= 3:
+                                self._placement_reason = 'lost_drag'
+                                self.screenshot('cubie-wars-drag-lost')
+                                return False  # finally returns/cancels and releases.
+                            legal = held and valid_preview(baseline, self.frame)
                             consecutive = consecutive + 1 if legal else 0
                             if consecutive >= 2:
                                 placed = True
@@ -678,16 +689,29 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self._placement_scans_saved += 1
         return False
 
+    def settled_screen(self):
+        # The Storage tutorial fades in after a round. Its first capture can
+        # contain no readable UI; wait briefly before classifying it as a
+        # changed screen. No recipe click is allowed on these unknown frames.
+        for attempt in range(8):
+            screen = self.observe()
+            if screen != Screen.UNKNOWN or attempt == 7:
+                return screen
+            self.sleep(.35)
+
     def synthesize(self):
         for _ in range(8):
             self.move_relative(.55, .78)
             self.sleep(.2)
-            screen = self.observe()
+            screen = self.settled_screen()
             if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
                 raise ShopInterrupted()
             if screen == Screen.SYNTHESIS:
                 recipes = [None]  # Resume an already-open modal or inline recipe.
             elif screen == Screen.SHOP:
+                if self._storage_pending:
+                    self.restore_storage()
+                    self._storage_pending = False
                 recipes = [y for y in (.267, .361, .455, .549) if recipe_available(self.frame, y)]
             else:
                 self.stop_with_evidence("Cubie Wars screen changed before synthesis")
@@ -696,7 +720,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 if y is not None:
                     # A recipe can open an inline button or a full-screen card.
                     self.click_relative(.058, y, after_sleep=.35)
-                    screen = self.observe()
+                    screen = self.settled_screen()
                 if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
                     raise ShopInterrupted()
                 if screen not in {Screen.SHOP, Screen.SYNTHESIS}:
@@ -711,14 +735,18 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 # The modal hides book capacity, and an upgrade can retain the
                 # same weight. Click first, return to Store, then check Storage.
                 self.click_relative(*button.center, after_sleep=.8)
+                self._storage_pending = True
                 self.leave_synthesis()
                 self.restore_storage()
+                self._storage_pending = False
                 self.info_incr("Cubie Wars synthesis attempts")
                 synthesized = True
                 break
             if not synthesized:
                 return
-        screen = self.observe()
+        screen = self.settled_screen()
+        if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
+            raise ShopInterrupted()
         if screen == Screen.SHOP and not any(recipe_available(self.frame, y)
                                             for y in (.267, .361, .455, .549)):
             return
@@ -749,6 +777,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def restore_storage(self):
         """A synthesis can leave the larger replacement weapon in Storage."""
         for _ in range(6):
+            self.require_shop()
             self.next_frame()
             baseline = self.frame.copy()
             tags = self.ocr(.22, .71, .8, .97, match=re.compile(r"^\d+$"), threshold=.7)
