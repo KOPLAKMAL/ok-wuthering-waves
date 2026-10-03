@@ -15,7 +15,8 @@ from src.task.cubie_wars.model import (
 from src.task.cubie_wars.vision import (
     capacity_tag, crop, green_check, number_frame, placement_points, possible_recommendation,
     preview_counts, recipe_available, recommended_item, recommended_event,
-    sheet_placements, spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
+    sheet_placements, spotlight_target, stage_label_frame, valid_preview, valid_sheet_preview,
+    white_check, yellow_button,
 )
 
 
@@ -563,8 +564,17 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         # beside an item actually held by the cursor, even on a red preview.
         # Native OCR merges this control with the neighboring Sold stamp while
         # a Sheet is still held. Do not interpret "Rotate Sold" as a lost drag.
-        return bool(self.ocr(.05, .1, .97, .96, match=re.compile(r'^Rotate(?:\s*Sold)?$', re.I),
+        return bool(self.ocr(.05, .1, .97, .96, match=re.compile(r'^(?:[D1Il|]\s*)?Rotate(?:\s*Sold)?$', re.I),
                              threshold=.65, frame=self.frame, target_height=1080))
+
+    def rotate_held_item(self):
+        # The game shows a right mouse-button glyph beside Rotate. Keep the
+        # left button down while pressing/releasing only the right button.
+        try:
+            self.mouse_down(key='right')
+            self.sleep(.05)
+        finally:
+            self.mouse_up(key='right')
 
     def pick_up(self, source):
         for attempt in range(3):
@@ -613,10 +623,12 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
     def drag_to_book(self, source, baseline, sheet=False, footprint=None):
         self._placement_reason = 'unknown'
         by_rotation = {rotation: [] for rotation in range(4)}
+        sheet_plans = {}
         if sheet and footprint:
             plans = sheet_placements(baseline, footprint)
             for plan in plans:
                 by_rotation[plan.rotation].append(plan.point)
+                sheet_plans[(plan.rotation, plan.point)] = plan
             points = [plan.point for plan in plans]
             self.log_info(f"Cubie Wars: Sheet footprint {len(footprint)} cells, "
                           f"{len(plans)} placements fit the blank board")
@@ -649,7 +661,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     for dx, dy in ((0, 0), (24 / 1920, 16 / 1080), (-24 / 1920, -16 / 1080)):
                         if self._deadline and time.monotonic() > self._deadline:
                             self.stop_with_evidence("Cubie Wars session time limit reached during placement")
-                        self.move_relative(point[0] + dx, point[1] + dy)
+                        cursor_point = (point[0] + dx, point[1] + dy)
+                        self.move_relative(*cursor_point)
                         consecutive = 0
                         not_held = 0
                         # Keep the cursor still and require two legal previews;
@@ -667,7 +680,11 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                                 self._placement_reason = 'lost_drag'
                                 self.screenshot('cubie-wars-drag-lost')
                                 return False  # finally returns/cancels and releases.
-                            legal = held and valid_preview(baseline, self.frame)
+                            if sheet and footprint:
+                                legal = held and valid_sheet_preview(
+                                    baseline, self.frame, sheet_plans[(rotation, point)], cursor_point)
+                            else:
+                                legal = held and valid_preview(baseline, self.frame)
                             consecutive = consecutive + 1 if legal else 0
                             if consecutive >= 2:
                                 placed = True
@@ -681,7 +698,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 if placed:
                     break
                 if not (sheet and footprint) or rotation < last_rotation:
-                    self.send_key('r')
+                    self.rotate_held_item()
                     self.sleep(.12)
         finally:
             # Return to the shop source if no valid ghost was seen. Never drop

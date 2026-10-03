@@ -267,6 +267,88 @@ def valid_preview(before, held):
     return green > held.shape[0] * held.shape[1] * .00015 and red == 0
 
 
+def valid_sheet_preview(before, held, plan, cursor_point):
+    """Verify an aligned Sheet ghost whose opaque sprite hides most green.
+
+    The whole footprint must fit the unheld board. Four *new* orange corners
+    must follow the commanded cursor, while new green remains in at least two
+    planned cells. Orange alone, a stale frame, or a thin red collision is not
+    placement evidence. The caller separately verifies held state and stability.
+    """
+    if (before is None or held is None or before.shape != held.shape
+            or not before.size or not plan.cells):
+        return False
+    cells = set(plan.cells)
+    if any(not (0 <= col < 8 and 0 <= row < 6) for col, row in cells):
+        return False
+    if not cells <= blank_board_cells(before):
+        return False
+    h, w = held.shape[:2]
+    sx, sy = w / 1920, h / 1080
+    area_scale = sx * sy
+    changed = np.max(cv2.absdiff(before, held), axis=2) > 25
+    hsv = cv2.cvtColor(held, cv2.COLOR_BGR2HSV)
+    green = (cv2.inRange(hsv, (55, 35, 100), (95, 150, 255)) > 0) & changed
+    orange = (cv2.inRange(hsv, (10, 70, 160), (40, 255, 255)) > 0) & changed
+    red = ((cv2.inRange(hsv, (0, 95, 130), (12, 255, 255)) > 0)
+           | (cv2.inRange(hsv, (160, 95, 130), (179, 255, 255)) > 0)) & changed
+
+    # Include Storage and book margins so a collision outside the board cannot
+    # be hidden by green evidence inside it. Preserve thin red strips too.
+    _, _, stats, _ = cv2.connectedComponentsWithStats(
+        crop(red.astype(np.uint8), (.065, .095, .575, .97)))
+    for _, _, width, height, area in stats[1:]:
+        axes = (width / sx, height / sy)
+        if max(axes) >= 18 and min(axes) >= 2 and area >= 30 * area_scale:
+            return False
+
+    def patch(mask, x0, y0, x1, y1):
+        left, top, right, bottom = map(round, (x0, y0, x1, y1))
+        if left < 0 or top < 0 or right > w or bottom > h:
+            return None
+        return mask[top:bottom, left:right]
+
+    cols, rows = zip(*cells)
+    half_width = 51 * (max(cols) - min(cols) + 1) + 3
+    half_height = 51 * (max(rows) - min(rows) + 1) + 3
+    cx, cy = cursor_point[0] * w, cursor_point[1] * h
+    for dx in (-half_width, half_width):
+        for dy in (-half_height, half_height):
+            x, y = cx + dx * sx, cy + dy * sy
+            corner = patch(orange, x - 23 * sx, y - 23 * sy,
+                           x + 23 * sx, y + 23 * sy)
+            if corner is None or np.count_nonzero(corner) < 50 * area_scale:
+                return False
+
+    # A Rapier Sheet's own sprite is green. Only exposed preview around the
+    # sprite proves legality; never use the dragged Sheet's body as evidence.
+    # Two native pixels also exclude sprite-color bleed after resizing.
+    body_left = max(0, round(cx - (half_width - 1) * sx))
+    body_right = min(w, round(cx + (half_width - 1) * sx))
+    body_top = max(0, round(cy - (half_height - 1) * sy))
+    body_bottom = min(h, round(cy + (half_height - 1) * sy))
+    green[body_top:body_bottom, body_left:body_right] = False
+
+    local = np.zeros((h, w), np.uint8)
+    green_cells = 0
+    for col, row in cells:
+        x, y = (261 + col * 102) * sx, (201 + row * 102) * sy
+        cell = patch(green, x - 51 * sx, y - 51 * sy,
+                     x + 51 * sx, y + 51 * sy)
+        if cell is None:
+            return False
+        if np.count_nonzero(cell) >= 20 * area_scale:
+            green_cells += 1
+        left, top = round(x - 51 * sx), round(y - 51 * sy)
+        local[top:top + cell.shape[0], left:left + cell.shape[1]] = cell
+    if (green_cells < min(2, len(cells))
+            or np.count_nonzero(local) < 80 * area_scale):
+        return False
+    _, _, stats, _ = cv2.connectedComponentsWithStats(local)
+    return any(max(width / sx, height / sy) >= 35 and area >= 50 * area_scale
+               for _, _, width, height, area in stats[1:])
+
+
 def yellow_button(frame, point):
     x, y = point
     tile = crop(frame, (x - .035, y - .012, x + .035, y + .012))

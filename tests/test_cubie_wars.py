@@ -17,7 +17,7 @@ from src.task.cubie_wars.model import (
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, number_frame, placement_points, possible_recommendation,
-    recipe_available, recommended_item,
+    recipe_available, recommended_item, SheetPlacement,
     recommended_event,
     spotlight_target, stage_label_frame, valid_preview, white_check, yellow_button,
 )
@@ -35,6 +35,7 @@ BUILD_CASES = json.loads((FIXTURES / 'builds/ocr.json').read_text(encoding='utf-
 RECOMMENDATION_CASES = json.loads((FIXTURES / 'recommendation_button_ocr.json').read_text())
 STORAGE_GUIDE = json.loads((FIXTURES / 'storage_guide/ocr.json').read_text())
 HELD_HP_SHEET = json.loads((FIXTURES / 'held_hp_bread_sheet_ocr.json').read_text(encoding='utf-8'))
+HELD_HP_SHEET_OCT4 = json.loads((FIXTURES / 'held_hp_bread_sheet_oct4_ocr.json').read_text(encoding='utf-8'))
 
 
 def build_texts(case):
@@ -666,6 +667,7 @@ def make_task():
     task.mouse_down = MagicMock()
     task.mouse_up = MagicMock()
     task.send_key = MagicMock()
+    task.rotate_held_item = MagicMock()
     # Placement tests below start after a verified pickup; test pickup itself
     # separately with failed presses, stale captures, and actual OCR fixtures.
     def picked_up(source):
@@ -786,7 +788,7 @@ def test_missing_stage_still_stops_instead_of_assuming_completion():
         task.stage_checks(5)
 
 
-def test_failed_drag_returns_to_source_rotates_with_r_and_releases():
+def test_failed_drag_returns_to_source_rotates_with_right_click_and_releases():
     task = make_task()
     task.executor.frame = frame('shop')
     task.screenshot = MagicMock()
@@ -794,8 +796,8 @@ def test_failed_drag_returns_to_source_rotates_with_r_and_releases():
             patch('src.task.CubieWarsTask.valid_preview', return_value=False):
         assert not task.drag_to_book((.636, .278), frame('shop'))
     task.mouse_down.assert_called_once_with(814, 200)
-    assert task.send_key.call_count == 4
-    assert all(call.args == ('r',) for call in task.send_key.call_args_list)
+    assert task.rotate_held_item.call_count == 4
+    task.send_key.assert_not_called()
     task.move_relative.assert_called_with(.636, .278)
     task.mouse_up.assert_called_once()
     assert task._placement_reason == 'unknown'
@@ -852,6 +854,27 @@ def test_real_sheet_rotate_merged_with_sold_is_still_a_held_item():
     assert task.drag_active()
 
 
+def test_real_1440p_mouse_icon_joined_to_rotate_is_still_held():
+    task = make_task()
+    del task.drag_active
+    task.executor.method.width, task.executor.method.height = 2560, 1440
+    task.executor.frame = cv2.imread(str(FIXTURES / 'held_hp_bread_sheet_oct4.png'))
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs: [SimpleNamespace(name=t['name'])
+        for t in HELD_HP_SHEET_OCT4['runtime_focused']
+        if t['confidence'] >= kwargs['threshold'] and kwargs['match'].fullmatch(t['name'])])
+    assert any(t['name'] == '1Rotate' for t in HELD_HP_SHEET_OCT4['runtime_focused'])
+    assert task.drag_active()
+
+
+@pytest.mark.parametrize('name', ['1Rotate', 'DRotate', 'D Rotate', 'IRotate', 'Rotate Sold'])
+def test_observed_mouse_glyph_prefixes_and_sold_do_not_signal_lost_drag(name):
+    task = make_task()
+    del task.drag_active
+    task.ocr = MagicMock(side_effect=lambda *args, **kwargs:
+                         [SimpleNamespace(name=name)] if kwargs['match'].fullmatch(name) else [])
+    assert task.drag_active()
+
+
 @pytest.mark.parametrize('text', ['Sold', 'Rotate Items to change their orientation',
                                  'Adjust the Sheet and rotate Items'])
 def test_static_instruction_text_cannot_confirm_held_sheet(text):
@@ -862,13 +885,31 @@ def test_static_instruction_text_cannot_confirm_held_sheet(text):
     assert not task.drag_active()
 
 
+def test_rotation_presses_and_releases_right_without_releasing_left():
+    task = make_task()
+    del task.rotate_held_item
+    task.rotate_held_item()
+    task.mouse_down.assert_called_once_with(key='right')
+    task.mouse_up.assert_called_once_with(key='right')
+    task.send_key.assert_not_called()
+
+
+def test_interrupted_rotation_still_releases_only_right_button():
+    task = make_task()
+    del task.rotate_held_item
+    task.sleep.side_effect = RuntimeError('Stopped')
+    with pytest.raises(RuntimeError, match='Stopped'):
+        task.rotate_held_item()
+    task.mouse_up.assert_called_once_with(key='right')
+
+
 def test_sheet_drag_uses_whole_footprint_plan_not_a_single_occupied_cell():
     task = make_task()
     before = cv2.imread(str(FIXTURES / 'sheet_geometry/board.png'))
     task.executor.frame = before
     task.click_relative = MagicMock()
     shape = sheet_footprint('HP Bread Sheet')
-    with patch('src.task.CubieWarsTask.valid_preview', return_value=True), \
+    with patch('src.task.CubieWarsTask.valid_sheet_preview', return_value=True), \
             patch('src.task.CubieWarsTask.placement_points') as old_points:
         assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, shape)
     old_points.assert_not_called()
@@ -894,9 +935,10 @@ def test_rotated_sheet_plan_rotates_before_trying_its_center():
     task.executor.frame = before
     plan = SimpleNamespace(rotation=1, point=(.3, .4))
     with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]), \
-            patch('src.task.CubieWarsTask.valid_preview', return_value=True):
+            patch('src.task.CubieWarsTask.valid_sheet_preview', return_value=True):
         assert task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
-    task.send_key.assert_called_once_with('r')
+    task.rotate_held_item.assert_called_once_with()
+    task.send_key.assert_not_called()
     task.move_relative.assert_called_once_with(*plan.point)
     task.mouse_up.assert_called_once()
 
@@ -909,12 +951,69 @@ def test_geometric_sheet_fit_with_failed_preview_is_not_reported_as_no_space():
     plan = SimpleNamespace(rotation=0, point=(.3, .4))
     with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]), \
             patch('src.task.CubieWarsTask.preview_counts', return_value=(0, 1000)), \
-            patch('src.task.CubieWarsTask.valid_preview', return_value=False):
+            patch('src.task.CubieWarsTask.valid_sheet_preview', return_value=False):
         assert not task.drag_to_book(task.SHOP_SLOTS[2], before, True, sheet_footprint('HP Bread Sheet'))
     assert task._placement_reason == 'unknown'
     task.send_key.assert_not_called()  # No more planned orientations.
     task.mouse_up.assert_called_once()
     task.move_relative.assert_called_with(*task.SHOP_SLOTS[2])
+
+
+def thin_sheet_frames():
+    directory = FIXTURES / 'thin_preview'
+    return (cv2.imread(str(directory/'positive_before_native.png')),
+            cv2.imread(str(directory/'positive_held_native.png')))
+
+
+def thin_sheet_plan():
+    return SheetPlacement(0, (6, 0), ((6, 0), (7, 0), (6, 1), (7, 1)),
+                          (924/1920, 252/1080), 2)
+
+
+def test_actual_thin_sheet_edges_release_after_first_stable_nudged_preview():
+    task = make_task()
+    before, held = thin_sheet_frames()
+    task.executor.frame = before
+    captures = iter([before]*3+[held]*2)
+    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
+    plan = thin_sheet_plan()
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[plan]):
+        assert task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
+    assert [c.args for c in task.move_relative.call_args_list] == [
+        plan.point, (948/1920, 268/1080)]
+    task.mouse_up.assert_called_once()
+    task.send_key.assert_not_called()
+    assert task.next_frame.call_count == 5
+    assert task._placement_reason == 'placed'
+
+
+def test_one_thin_sheet_preview_then_disappearance_never_drops():
+    task = make_task()
+    before, held = thin_sheet_frames()
+    task.executor.frame = before
+    captures = iter([before]*3+[held]+[before]*5)
+    task.next_frame.side_effect = lambda: setattr(task.executor, 'frame', next(captures))
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[thin_sheet_plan()]):
+        assert not task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[1])
+    task.mouse_up.assert_called_once()
+    assert task._placement_reason == 'unknown'
+
+
+def test_thin_sheet_evidence_cannot_drop_an_item_when_hold_is_lost():
+    task = make_task()
+    before, held = thin_sheet_frames()
+    task.executor.frame = held
+    task.drag_active.return_value = False
+    task.screenshot = MagicMock()
+    with patch('src.task.CubieWarsTask.sheet_placements', return_value=[thin_sheet_plan()]), \
+            patch('src.task.CubieWarsTask.valid_sheet_preview') as preview:
+        assert not task.drag_to_book(task.SHOP_SLOTS[1], before, True, sheet_footprint('Empty Sheet'))
+    preview.assert_not_called()
+    task.mouse_up.assert_called_once()
+    task.move_relative.assert_called_with(*task.SHOP_SLOTS[1])
+    assert task._placement_reason == 'lost_drag'
 
 
 def test_three_missed_pickups_do_not_search_or_report_a_purchase():

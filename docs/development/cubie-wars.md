@@ -25,10 +25,12 @@ administrator privileges. This prevents silent clicks against an elevated game;
 input-free inspection still works without elevation.
 
 During active Cubie Wars runs with the native PostMessage backend, a temporary
-adapter brings the game to the foreground. Hover uses the framework's PyDirect
-cursor method; held movement uses native SendInput, matching its native press,
-with coordinates converted through the capture's window offsets. Keep the
-mouse free while it runs.
+adapter brings the game to the foreground. Hover, clicks and held movement use
+native input with coordinates converted through the capture's window offsets.
+Held movement follows intermediate steps no longer than 16 screen pixels;
+focus is checked before each step. No posted hover/button/activation messages
+are mixed into this stream. Keyboard controls use the native cursor backend.
+Keep the mouse free while it runs.
 The usual PostMessage backend is restored on completion, error, or Stop.
 Inspection does not install this adapter or move the cursor.
 
@@ -138,7 +140,9 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
 
 ## Input and shopping
 
-- Hold the left mouse button to drag; press **R** to rotate while holding.
+- Hold the left mouse button to drag; **right-click** to rotate while holding.
+  The user clarified that the earlier "R" meant the right mouse button, not
+  keyboard R. Track buttons separately so releasing right keeps left held.
 - A purchase is attempted only with a readable price, adequate coins, and a
   recognized tooltip. Sheet and Weapon offers may be purchased without a thumb;
   Accessory, Relic, and Item offers require a gold recommendation thumb.
@@ -215,10 +219,31 @@ whose preview fails is reported as unverifiable, not as proof of no space.
 
 The 10:43/10:44 lost-HP-Bread errors were false detections: the Sheet was still
 held, but actual OCR merged its control with the neighboring stamp as
-`Rotate Sold`. Accept that exact combined label as well as `Rotate`, while
+`Rotate Sold`. At 1440p on October 4 the mouse glyph also became `1Rotate` or
+`DRotate`; accept these observed icon prefixes and the combined label while
 rejecting tutorial sentences. The preserved native capture reproduces the
 error. Both geometric plans and combined-label handling remain subject to live
 drop validation; two stable green previews and a coin decrease are required.
+
+The 11:17 Empty Sheet capture exposed a separate preview issue: the Sheet
+sprite hides most green fill, leaving long thin strips. The generic item
+detector counted only 287 pixels, below its native threshold of 311, and lost
+the strips entirely at 1440p. Known Sheet plans now require all footprint cells
+blank, four new orange corners aligned to the commanded cursor and shape,
+exposed changed green in multiple planned cells, and no meaningful red collision
+(including thin red strips). The dragged sprite's bounding box plus a two-pixel
+margin is excluded from green evidence so a green Rapier Sheet cannot prove
+legality using its own color. Orange alone is never enough. This specialized
+check also rejects stale previews at a previous target. Two consecutive held,
+valid samples are still required before release, followed by live coin checks.
+The preserved positive and below-board negative crops are tested at 720p,
+1080p and 1440p; their unobserved exterior is explicitly zero-filled.
+
+The October 4 capture shows a vertical HP Bread Sheet at a candidate intended
+for its horizontal rotation, with red collision cells. The old code sent a
+keyboard R instead of the mouse-right glyph shown by the game. Native right
+press/release now rotates while preserving the held left button; interruption
+cleanup releases every tracked button and restores the original backend.
 - The 05:36 run confirms real hover opened the native "Random" Crystal card.
   Its Accessory label is below Adventurer, not beside it; read either layout
   without treating "Weapons" in the description as the category. A valid
