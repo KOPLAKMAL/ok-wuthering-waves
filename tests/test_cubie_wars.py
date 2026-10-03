@@ -24,6 +24,7 @@ FIXTURES = Path(__file__).parent / 'images' / 'cubie_wars'
 CASES = json.loads((FIXTURES / 'ocr.json').read_text(encoding='utf-8'))
 LIVE_HOVER = json.loads((FIXTURES / 'live_hover_ocr.json').read_text(encoding='utf-8'))
 LIVE_SYNTHESIS = json.loads((FIXTURES / 'live_synthesis_modal_ocr.json').read_text(encoding='utf-8'))
+LIVE_PERSISTENT_ITEM = json.loads((FIXTURES / 'live_persistent_item_ocr.json').read_text(encoding='utf-8'))
 
 
 def frame(name):
@@ -298,20 +299,27 @@ def test_held_item_marker_from_actual_native_and_recording_ocr(case):
 def test_pickup_retries_missed_press_then_keeps_mouse_down_on_two_held_frames():
     task = make_task()
     del task.pick_up
+    task.require_shop = MagicMock()
     task.drag_active.side_effect = [False] * 4 + [False, True, True]
     source = task.SHOP_SLOTS[3]
     assert task.pick_up(source)
     assert task.mouse_down.call_count == 2
     task.mouse_up.assert_called_once()
     assert task.next_frame.call_count == 7
-    assert [c.args for c in task.move_relative.call_args_list] == [
-        source, (.5, .78), source, (.55, .78), source, (.5, .78)]
+    moves = [c.args for c in task.move_relative.call_args_list]
+    assert moves[0] == source
+    assert moves[1:3] == [(source[0] + dx / 1920, source[1]) for dx in (8, 16)]
+    assert moves[8] == (.5, .78)
+    assert moves[9:12] == [source, (.55, .78), source]
+    assert moves[-1] == (.5, .78)
+    task.require_shop.assert_called_once()
     task.send_key.assert_not_called()
 
 
 def test_three_missed_pickups_do_not_search_or_report_a_purchase():
     task = make_task()
     del task.pick_up
+    task.require_shop = MagicMock()
     task.drag_active.return_value = False
     task.screenshot = MagicMock()
     with patch('src.task.CubieWarsTask.placement_points', return_value=[(.3, .3)]), \
@@ -323,6 +331,7 @@ def test_three_missed_pickups_do_not_search_or_report_a_purchase():
     preview.assert_not_called()
     task.send_key.assert_not_called()
     task.screenshot.assert_called_once_with('cubie-wars-pickup-failed')
+    assert task.require_shop.call_count == 3
 
 
 def test_interrupted_pickup_always_returns_to_source_and_releases():
@@ -869,13 +878,15 @@ def test_live_recommended_crystal_reaches_purchase_before_refresh():
     task.click_relative.assert_not_called()
 
 
-def test_active_tooltip_is_cleared_before_round_preparation_or_start():
+@pytest.mark.parametrize('persistent', [False, True])
+def test_active_tooltip_is_cleared_before_round_preparation_or_start(persistent):
     task = make_task()
     screens = iter([Screen.ITEM_TOOLTIP, Screen.SHOP, Screen.SHOP, Screen.STAGE_RESULT])
 
     def observe():
         screen = next(screens)
-        task._texts = [Text(**t) for t in LIVE_HOVER['texts']] if screen == Screen.ITEM_TOOLTIP else [
+        labels = LIVE_PERSISTENT_ITEM if persistent else LIVE_HOVER['texts']
+        task._texts = [Text(**t) for t in labels] if screen == Screen.ITEM_TOOLTIP else [
             Text('Round 1 - Store', .6, .1)]
         return screen
 
@@ -883,10 +894,52 @@ def test_active_tooltip_is_cleared_before_round_preparation_or_start():
     task.prepare_round = MagicMock(return_value=True)
     task.start_round = MagicMock()
     task.click_text = MagicMock()
+    task.click_relative = MagicMock()
     task.play_stage('Story')
     task.move_relative.assert_called_once_with(.55, .78)
     task.prepare_round.assert_called_once()
     task.start_round.assert_called_once()
+    if persistent:
+        task.click_relative.assert_called_once_with(.5, .78, after_sleep=.35)
+    else:
+        task.click_relative.assert_not_called()
+
+
+@pytest.mark.parametrize('following', [Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.SPOTLIGHT])
+def test_persistent_item_card_must_close_to_shop_before_retry(following):
+    task = make_task()
+    task._texts = [Text(**t) for t in LIVE_PERSISTENT_ITEM]
+    assert classify(task._texts) == Screen.ITEM_TOOLTIP
+    task.executor.frame = cv2.imread(str(FIXTURES / 'live_persistent_item.png'))
+    task.observe = MagicMock(side_effect=[Screen.ITEM_TOOLTIP, following])
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    if following == Screen.SHOP:
+        task.require_shop()
+    elif following == Screen.SPOTLIGHT:
+        with pytest.raises(ShopInterrupted):
+            task.require_shop()
+    else:
+        with pytest.raises(RuntimeError, match='Store changed'):
+            task.require_shop()
+    task.click_relative.assert_called_once_with(.5, .78, after_sleep=.35)
+    assert task.observe.call_count == 2
+    task.mouse_down.assert_not_called()
+
+
+def test_pickup_does_not_retry_while_card_stays_open():
+    task = make_task()
+    del task.pick_up
+    task.drag_active.return_value = False
+    task._texts = [Text(**t) for t in LIVE_PERSISTENT_ITEM]
+    task.observe = MagicMock(return_value=Screen.ITEM_TOOLTIP)
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='Store changed'):
+        task.pick_up(task.SHOP_SLOTS[4])
+    task.mouse_down.assert_called_once()
+    task.mouse_up.assert_called_once()
+    task.click_relative.assert_called_once_with(.5, .78, after_sleep=.35)
 
 
 @pytest.mark.parametrize('allow', [True, False])

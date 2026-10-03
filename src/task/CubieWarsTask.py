@@ -209,8 +209,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     if self.text(name, (.65, .08, 1, .25))), "Adventurer")
                 self.click_text(r"^G[o0C]$", (.65, .8, 1, 1))
             elif screen == Screen.ITEM_TOOLTIP:
-                self.move_relative(.55, .78)
-                self.sleep(.3)
+                self.clear_item_info()
             elif screen == Screen.SYNTHESIS:
                 try:
                     self.synthesize()
@@ -304,8 +303,20 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             if self.observe() != Screen.COMBAT:
                 return
 
+    def clear_item_info(self):
+        # A click opens a persistent card; moving away only clears hover cards.
+        # Click outside the card only when its explicit close prompt is visible.
+        if self.text(r'Click anywhere to close', (.2, .25, .85, .8)):
+            self.click_relative(.5, .78, after_sleep=.35)
+        self.move_relative(.55, .78)
+        self.sleep(.3)
+
     def require_shop(self, allow_tooltip=False):
         screen = self.observe()
+        if (screen == Screen.ITEM_TOOLTIP and not allow_tooltip
+                and self.text(r'Click anywhere to close', (.2, .25, .85, .8))):
+            self.clear_item_info()
+            screen = self.observe()
         if screen in {Screen.GUIDE, Screen.SPOTLIGHT}:
             raise ShopInterrupted()
         if screen != Screen.SHOP and not (allow_tooltip and screen == Screen.ITEM_TOOLTIP):
@@ -476,10 +487,20 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.move_relative(*source)
                 self.sleep(.35)
                 self.mouse_down(round(source[0] * self.width), round(source[1] * self.height))
-                self.sleep(.25)
+                self.sleep(.15)
+                # Cross the drag threshold near the pressed item before the
+                # long move. Teleporting out of its tile can become a click.
+                for dx in (8 / 1920, 16 / 1920):
+                    self.move_relative(source[0] + dx, source[1])
+                    self.sleep(.06)
                 # Move into empty Storage to expose the held-item control.
                 # A missed press only moves the cursor here, hiding its tooltip.
-                self.move_relative(.5, .78)
+                start = (source[0] + 16 / 1920, source[1])
+                for step in range(1, 7):
+                    fraction = step / 6
+                    self.move_relative(start[0] + (.5 - start[0]) * fraction,
+                                       start[1] + (.78 - start[1]) * fraction)
+                    self.sleep(.04)
                 consecutive = 0
                 for _ in range(4):
                     self.sleep(.2)
@@ -497,6 +518,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.log_info(f"Cubie Wars: item did not lift on pickup attempt {attempt + 1}")
             self.move_relative(.55, .78)
             self.sleep(.3)
+            # The failed press/release can open item details. Dismiss that card
+            # and verify the Store before another press or reporting failure.
+            self.require_shop()
         self.screenshot('cubie-wars-pickup-failed')
         return False
 

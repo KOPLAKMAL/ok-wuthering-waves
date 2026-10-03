@@ -37,6 +37,8 @@ def test_drag_keeps_left_button_and_releases_at_drop_not_origin(windows):
     interaction = CubieWarsInteraction(capture, window)
     interaction.mouse_down(1471, 300)
     cursor.mouse_down.assert_called_once_with(1471, 300, name=None, key='left')
+    # No queued unpressed hover or activation may race the native press.
+    post.assert_not_called()
     post.reset_mock()
     interaction.move(780, 430)
     cursor.move.assert_called_with(780, 430)

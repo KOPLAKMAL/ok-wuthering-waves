@@ -36,10 +36,13 @@ class CubieWarsInteraction(PostMessageInteraction):
         return super().move(x, y, down_btn=down_btn or self.held_button)
 
     def mouse_down(self, x=-1, y=-1, name=None, key="left"):
-        self.move(x, y)
+        # Mark the native drag before moving: do not queue an unpressed
+        # WM_MOUSEMOVE/WM_ACTIVATE immediately before the physical press.
+        # A late posted hover event can contradict the native button state.
         self.held_button = {"left": win32con.MK_LBUTTON,
                             "middle": win32con.MK_MBUTTON,
                             "right": win32con.MK_RBUTTON}[key]
+        self.move(x, y)
         self.cursor.mouse_down(x, y, name=name, key=key)
 
     def mouse_up(self, key="left"):
