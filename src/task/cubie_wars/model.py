@@ -30,6 +30,7 @@ class Screen(Enum):
     RECEIPT = "Items obtained"
     SYNTHESIS = "Quick synthesis"
     UNLOCK = "New Cubie Warrior"
+    BUILD_GUIDE = "Character role guide"
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,8 @@ def classify(texts):
     if has(r'New Cu[bh]ie Warrior.*reporting for duty', (.15, .15, .85, .4)) and has(
             r'Click anywhere to close', (.3, .8, .7, 1)):
         return Screen.UNLOCK
+    if has(r"Role\s*Guide") and has(r"^Collection$"):
+        return Screen.BUILD_GUIDE
     if has(r"Astrite", (.2, .15, .8, .8)) and has(r"^Confirm$", (.2, .5, .85, .95)) and has(r"^Cancel$"):
         return Screen.PURCHASE
     if has(r"Turn to the last page|Items must be placed entirely|Items placed in the Storybook") or (
@@ -143,10 +146,42 @@ STORY_COUNT = 5
 ADVENTURE_COUNT = 6  # Stage 6 also grants 50 Astrite through the Challenge tab.
 CUBES = ("Rover", "Aemeath", "Hsin", "Sigrika", "Lynae")
 ROLES = ("Adventurer", "Rapier", "Traumatizer", "Heavy Hitter", "Gold Hunter")
+CHAR_ROLES = dict(zip(CUBES, ROLES))
+STAGE_CUBES = {
+    "Story": ("Rover", "Aemeath", "Hsin", "Sigrika", "Lynae"),
+    "Adventure": ("Rover", "Sigrika", "Hsin", "Lynae", "Aemeath", "Lynae"),
+}
 ASTRITE_TOTAL = 1200
 STORE_OFFERS = ((50, 200), (50, 200), (100, 500), (100, 500))
 MILESTONES = (250, 750)
 CATEGORY_PRIORITY = {'Sheet': 0, 'Weapon': 1, 'Accessory': 2, 'Relic': 3, 'Item': 4}
+
+
+def stage_cube(mode, stage):
+    """Player character for each stage, supplied and confirmed by the user."""
+    if mode not in STAGE_CUBES:
+        raise ValueError("Unknown Cubie Wars mode")
+    cubes = STAGE_CUBES[mode]
+    if isinstance(stage, bool) or not isinstance(stage, int) or not 1 <= stage <= len(cubes):
+        raise ValueError("Invalid Cubie Wars stage")
+    return cubes[stage - 1]
+
+
+def selected_build(texts):
+    """Read the selected guide header, excluding the other characters at left."""
+    if not any(re.fullmatch(r"Role\s*Guide", t.name.strip(), re.I) for t in texts):
+        return None
+    selected = {name for t in texts for name in CUBES
+                if .80 <= t.center[0] <= 1 and .09 <= t.center[1] <= .21
+                and re.fullmatch(re.escape(name), t.name.strip(), re.I)}
+    if len(selected) != 1:
+        return None
+    name = next(iter(selected))
+    roles = {role for t in texts for role in ROLES
+             if .36 <= t.center[0] <= .55 and .23 <= t.center[1] <= .33
+             and re.fullmatch(r"(?:[^\w]|[Xx])*" + re.escape(role).replace(r"\ ", r"\s*"),
+                              t.name.strip(), re.I)}
+    return name if roles == {CHAR_ROLES[name]} else None
 
 
 def next_stage(mode, checks):
@@ -181,7 +216,10 @@ class Item:
             return (18 if free_cells < 8 else 2) / price
         if self.cost is None or self.cost > spare_capacity:
             return 0
-        synergy = 1.8 if self.role in (role, "Adventurer") else .55
+        if self.category == 'Weapon' and role != "Adventurer" and self.role not in (role, "Adventurer"):
+            return 0
+        synergy = 1.8 if (self.role in (role, "Adventurer")
+                          or self.category == 'Weapon' and role == "Adventurer") else .55
         dps = self.damage / max(self.interval, .2)
         utility = 0
         for word, value in (("shield", 4), ("heal", 4), ("max hp", 3),

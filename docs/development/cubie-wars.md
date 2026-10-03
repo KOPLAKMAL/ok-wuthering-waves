@@ -68,6 +68,48 @@ The stage list uses grayscale OCR restricted to its label column.
 This reads both white unselected labels and brown selected labels on gold;
 the selected Story stage 5 was missed by full-screen OCR during live testing.
 
+## Character and item references
+
+The user supplied the player-character mapping below. Stage-list portraits are
+not used to infer the player's character; the five Role Guide screenshots
+confirm the character affinities. Adventure selects and verifies the stage's
+character instead of always selecting Lynae. Story verifies its fixed character.
+
+| Stage | Story | Adventure |
+| --- | --- | --- |
+| 1 | Rover / all weapon types | Rover / all weapon types |
+| 2 | Aemeath / Rapier | Sigrika / Heavy Hitter |
+| 3 | Hsin / Traumatizer | Hsin / Traumatizer |
+| 4 | Sigrika / Heavy Hitter | Lynae / Gold Hunter |
+| 5 | Lynae / Gold Hunter | Aemeath / Rapier |
+| 6 | — | Lynae / Gold Hunter |
+
+Resume from Store reads the active character using the observed Recommendation
+control and **N**. The user confirmed this opens the current character's guide.
+The selected header name and role must agree, excluding the other four sidebar
+entries. Close the guide and return to Store before shopping. An already-open
+guide is reopened via N because the user may have selected another entry.
+Unreadable identity stops without assuming Rover or buying anything.
+
+`src/task/cubie_wars/items.json` contains 126 definitions from the Collection
+photos: 12 Sheets, 35 Weapons, 53 Accessories, 7 Relics, 19 Items. Names/roles and
+all 35 weapon stat rows were visually checked. Four numeric OCR failures were
+corrected from the source pixels; raw OCR and compact card crops remain in tests.
+Thirteen measured title aliases handle actual split/extra-glyph OCR; matching
+is exact after punctuation/spacing normalization, never fuzzy or truncated.
+Missing metadata can be restored only when the visible item title and header
+identify one entry. Conflicting readable roles, categories or stat values reject
+the reference instead of overriding current game text. Prices and coins are
+always read live. Absent nonweapon COST remains null in the source catalog;
+the runtime keeps its existing zero-COST rule for Accessories/Relics/Items.
+Seven descriptions are visibly clipped and are explicitly marked incomplete.
+
+Core Item icons in the five guides were matched to Collection names. Prefer
+those items within a category, retaining Sheet-first order and the thumb policy
+for Accessories/Relics/Items. Rover's four core Weapons are the base variants;
+the specialists' first core Weapons are Xtreme variants. This preference does
+not require a completed illustrated build or guarantee a win.
+
 ## Reward target verified from the reference recording
 
 | Source | Astrite | Required progress |
@@ -91,6 +133,8 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   recognized tooltip. Sheet and Weapon offers may be purchased without a thumb;
   Accessory, Relic, and Item offers require a gold recommendation thumb.
   Weapon COST must fit the remaining capacity.
+  Specialists reject Weapons from another specialist role; Adventurer Weapons
+  remain usable. Rover accepts all weapon roles with equal affinity.
 - Buy eligible items in this order: Sheet, Weapon, Accessory, Relic, Item.
   Within a category, rank by damage per attack interval, role, and defensive
   effects. An unknown category is skipped. The thumb is detected before
@@ -152,7 +196,8 @@ Astrite reward and is not pursued. Non-Astrite store items are not purchased.
   separate item-tooltip state, even when it hides the round title. Resume
   clears that card before reading the round or taking shop actions.
 - Try available yellow Synthesize buttons, bounded shop refreshes, and 2x
-  combat speed. Adventure currently selects Lynae; Story uses its fixed Cubie.
+  combat speed. Adventure uses the stage-character mapping above; Story uses
+  its fixed Cubie.
 - Event cards prefer a visible recommendation thumb. If none is present, try
   each card's refresh once, stopping when a recommendation appears. If none
   appears, use the existing defensive-effect heuristic and confirm. The first
@@ -179,6 +224,8 @@ and the capacity guard before buying. Live purchase still needs verification.
 - Tutorial popups, quick synthesis, discount OCR, item stacking and replacement,
   and event choices need live validation. The task currently adds items to free
   slots; it does not solve a global inventory rearrangement or replacement plan.
+  Signature Weapon limits are separate from weight capacity; the planner does
+  not yet model that counter. Placement still requires a valid green preview.
 - Stage 6 can fail even with legal placements. Stop on the configured attempt
   limit and inspect the build; an offline test does not prove a winning strategy.
 - English is the only observed game language. Translated application labels do
@@ -204,6 +251,12 @@ part of the feature.
 screenshots supplied by the user and their actual OCR output. Tests verify all
 screen types, highlighted targets at three resolutions, single-page guides,
 deferring shop resource reads under tutorials, and Event thumb/refresh choices.
+`tests/images/cubie_wars/builds/` contains the five Role Guides and both stage
+lists, with UID removed, plus actual OCR. Tests cross-check all selected header
+roles and all 5/6 stage labels using the production grayscale OCR crop.
+`tests/images/cubie_wars/collection/` preserves actual OCR for all 126 selected
+item cards and five compact regression crops. Replay tests use these real title
+and role detections to verify recovery when the tooltip stats are missing.
 The thumb asset and Store fixtures also come from the recording. Native-size
 coin and price crops reproduce the live OCR failure and its correction with the
 same OCR settings as the application; these tests still do not prove live input

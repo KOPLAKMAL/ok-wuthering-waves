@@ -41,6 +41,7 @@ setuptools.setup(
     description="Automation with Computer Vision for Python",
     url="https://github.com/ok-oldking/ok-script",
     packages=setuptools.find_packages(),
+    package_data={"src": ["task/cubie_wars/items.json"]},
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",

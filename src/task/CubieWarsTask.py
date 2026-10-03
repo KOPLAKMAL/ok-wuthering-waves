@@ -6,9 +6,11 @@ from ok.util.process import is_admin
 from src.task.BaseWWTask import BaseWWTask
 from src.task.WWOneTimeTask import WWOneTimeTask
 from src.task.cubie_wars.interaction import cubie_cursor
+from src.task.cubie_wars.catalog import core_item, name_index, normalize_name, reference_item
 from src.task.cubie_wars.model import (
-    ADVENTURE_COUNT, CUBES, MILESTONES, STORY_COUNT, STORE_OFFERS,
-    Screen, Text, classify, joined, next_stage, parse_item, spotlight_instruction,
+    ADVENTURE_COUNT, CHAR_ROLES, CUBES, MILESTONES, STORY_COUNT, STORE_OFFERS,
+    Screen, Text, classify, joined, next_stage, parse_item, selected_build, stage_cube,
+    spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, crop, green_check, number_frame, placement_points, possible_recommendation,
@@ -48,6 +50,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
         self.support_schedule_task = False
         self._texts = []
         self._role = "Adventurer"
+        self._cube = None
         self._deadline = 0
         self._spotlight_attempts = {}
         self._shop_scans_saved = 0
@@ -77,7 +80,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Cubie Wars currently requires a 16:9 game window at least 1280 pixels wide")
         resume_story = self.config.get("Mode") == "Resume Story stage"
         if resume_story:
-            if screen not in {Screen.UNLOCK, Screen.STAGES, Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.SYNTHESIS, Screen.MATCHING,
+            if screen not in {Screen.UNLOCK, Screen.STAGES, Screen.BUILD_GUIDE, Screen.GUIDE, Screen.SPOTLIGHT, Screen.DETAILS, Screen.SHOP, Screen.ITEM_TOOLTIP, Screen.SYNTHESIS, Screen.MATCHING,
                               Screen.COMBAT, Screen.ROUND_RESULT, Screen.STAGE_RESULT, Screen.EVENT}:
                 self.stop_with_evidence("Open the active Story stage before choosing Resume Story stage")
         elif screen != Screen.HUB:
@@ -86,6 +89,8 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Restart OK-WW as Administrator using Start Cubie Wars.cmd, then approve Windows UAC")
         with cubie_cursor(self.executor):
             WWOneTimeTask.run(self)
+            self._cube = None
+            self._role = "Adventurer"
             if resume_story:
                 if screen not in {Screen.UNLOCK, Screen.STAGES}:
                     self.play_stage("Story")
@@ -161,7 +166,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.click_relative(*rows[stage].center, after_sleep=.6)
             self.wait_screen({Screen.STAGES})
             self.click_text(r"^Go$", (.7, .8, 1, 1))
-            self.play_stage(mode)
+            self.play_stage(mode, stage)
             self.wait_screen({Screen.STAGES})
             after, _ = self.stage_checks(count)
             if not after[stage]:
@@ -188,7 +193,11 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             self.stop_with_evidence("Could not read every Cubie Wars stage in the list")
         return {n: green_check(self.frame, .149, t.center[1]) for n, t in rows.items()}, rows
 
-    def play_stage(self, mode):
+    def play_stage(self, mode, stage=None):
+        expected_cube = stage_cube(mode, stage) if stage is not None else None
+        if expected_cube:
+            self._cube = expected_cube
+            self._role = CHAR_ROLES[expected_cube]
         unknown_since = time.monotonic()
         last_shop = None
         for _ in range(1000):
@@ -203,17 +212,21 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 self.handle_guide()
             elif screen == Screen.DETAILS:
                 self.click_relative(.935, .19, after_sleep=.6)
+            elif screen == Screen.BUILD_GUIDE:
+                self.read_active_build(already_open=True)
+                if expected_cube and self._cube != expected_cube:
+                    self.stop_with_evidence(f"Active Cubie differs from selected stage: {expected_cube}")
             elif screen == Screen.CUBE:
                 if mode == "Adventure":
-                    # Lynae's Gold Hunter build was observed winning the final
-                    # stage in the reference recording. Confirm her name first.
-                    self.click_relative(self.CUBE_POSITIONS[4], .914, after_sleep=.6)
+                    if not expected_cube:
+                        self.stop_with_evidence("Adventure stage number is required before selecting a Cubie")
+                    self.click_relative(self.CUBE_POSITIONS[CUBES.index(expected_cube)], .914, after_sleep=.6)
                     self.wait_screen({Screen.CUBE})
-                    if not self.text(r"Lynae", (.65, .08, 1, .25)):
-                        self.stop_with_evidence("Lynae could not be selected")
-                self._role = next((role for name, role in zip(CUBES, (
-                    "Adventurer", "Rapier", "Traumatizer", "Heavy Hitter", "Gold Hunter"))
-                    if self.text(name, (.65, .08, 1, .25))), "Adventurer")
+                cube = next((name for name in CUBES
+                             if self.text('^' + name + '$', (.65, .08, 1, .25))), None)
+                if not cube or expected_cube and cube != expected_cube:
+                    self.stop_with_evidence(f"Could not verify selected Cubie: {expected_cube or 'Story character'}")
+                self._cube, self._role = cube, CHAR_ROLES[cube]
                 self.click_text(r"^G[o0C]$", (.65, .8, 1, 1))
             elif screen == Screen.ITEM_TOOLTIP:
                 self.clear_item_info()
@@ -223,6 +236,9 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                 except ShopInterrupted:
                     continue
             elif screen == Screen.SHOP:
+                if not self._cube:
+                    self.read_active_build()
+                    continue
                 round_text = self.text(r"Round\s*\d+.*Store", (.55, .09, .8, .2)).name
                 if last_shop == round_text:
                     self.stop_with_evidence("The prepared round did not start")
@@ -254,6 +270,25 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             else:
                 self.sleep(.5)
         self.stop_with_evidence("Cubie Wars stage action limit reached")
+
+    def read_active_build(self, already_open=False):
+        """N opens the active character's Role Guide, as confirmed by the user."""
+        # An already-open Collection may have another character selected by
+        # hand. Reopen via N so it reflects the active battle character.
+        if already_open:
+            self.click_relative(.943, .06, after_sleep=.6)
+            self.wait_screen({Screen.SHOP})
+        if not self.text(r'Recommenda', (0, .7, .2, .9)):
+            self.stop_with_evidence("Cannot identify the active Cubie: Recommendation is unreadable")
+        self.send_key('n')
+        self.wait_screen({Screen.BUILD_GUIDE})
+        cube = selected_build(self._texts)
+        if not cube:
+            self.stop_with_evidence("Cannot read the active Cubie name and role in Role Guide")
+        self._cube, self._role = cube, CHAR_ROLES[cube]
+        self.log_info(f"Cubie Wars: active build {cube} ({self._role})")
+        self.click_relative(.943, .06, after_sleep=.6)
+        self.wait_screen({Screen.SHOP})
 
     def number(self, region, fraction=False):
         pattern = r"(\d+)\s*/\s*(\d+)" if fraction else r"\d+"
@@ -370,6 +405,13 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
             tooltip = [Text(b.name, b.x / self.width, b.y / self.height,
                             b.width / self.width, b.height / self.height) for b in boxes]
             item = parse_item(tooltip)
+            reference = reference_item(tooltip, item)
+            if reference:
+                item = reference
+            elif item and normalize_name(item.name) in name_index():
+                # A known name with conflicting readable metadata is ambiguous.
+                self.require_shop(allow_tooltip=True)
+                continue
             if item and item.category:
                 return item
             self.require_shop(allow_tooltip=True)
@@ -419,6 +461,7 @@ class CubieWarsTask(WWOneTimeTask, BaseWWTask):
                     self.log_info(f"Cubie Wars: slot {index + 1} {item.name} ({item.category}), "
                                   f"price {price}, eligible {rank is not None}")
                     if rank is not None:
+                        rank = (rank[0], core_item(item.name, self._cube), rank[1])
                         offers.append((rank, index, item))
                     self.move_relative(.55, .78)
                     self.sleep(.25)

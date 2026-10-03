@@ -1,0 +1,604 @@
+[
+  {
+    "image": "card_3194.png",
+    "source_filename": "Screenshot (3194).png",
+    "original_image_size": [
+      2560,
+      1440
+    ],
+    "crop_box_pixels": [
+      1756,
+      288,
+      2473,
+      1346
+    ],
+    "expected": {
+      "name": "Thunderflare Dominion",
+      "category": "Weapon",
+      "role": "Heavy Hitter",
+      "damage": 159.0,
+      "attack_interval": 6.0,
+      "cost_weight": 4,
+      "description_visible": "Grants 1 stack of Lifesteal to the Cubie Warrior\nfor every 50 HP lost."
+    },
+    "actual_ocr": [
+      {
+        "name": "Thunderflare Dominion",
+        "confidence": 0.9785366058349609,
+        "x": 0.6984375,
+        "y": 0.43333333333333335,
+        "width": 0.191015625,
+        "height": 0.034722222222222224
+      },
+      {
+        "name": "Heavy Hitter",
+        "confidence": 0.9513035416603088,
+        "x": 0.7046875,
+        "y": 0.47152777777777777,
+        "width": 0.088671875,
+        "height": 0.034027777777777775
+      },
+      {
+        "name": "DMG",
+        "confidence": 0.9904325008392334,
+        "x": 0.7140625,
+        "y": 0.5493055555555556,
+        "width": 0.033203125,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "159",
+        "confidence": 0.9991883635520935,
+        "x": 0.925,
+        "y": 0.5486111111111112,
+        "width": 0.0265625,
+        "height": 0.029166666666666667
+      },
+      {
+        "name": "Attack Interval",
+        "confidence": 0.9877120852470398,
+        "x": 0.714453125,
+        "y": 0.5993055555555555,
+        "width": 0.088671875,
+        "height": 0.025
+      },
+      {
+        "name": "6s",
+        "confidence": 0.8488929867744446,
+        "x": 0.9328125,
+        "y": 0.5979166666666667,
+        "width": 0.019140625,
+        "height": 0.027777777777777776
+      },
+      {
+        "name": "COST",
+        "confidence": 0.9938393831253052,
+        "x": 0.715234375,
+        "y": 0.6472222222222223,
+        "width": 0.036328125,
+        "height": 0.02638888888888889
+      },
+      {
+        "name": "A",
+        "confidence": 0.6537452340126038,
+        "x": 0.939453125,
+        "y": 0.6493055555555556,
+        "width": 0.011328125,
+        "height": 0.02013888888888889
+      },
+      {
+        "name": "Grants 1 stack of Lifesteal to the Cubie Warrior",
+        "confidence": 0.9764729142189026,
+        "x": 0.688671875,
+        "y": 0.6986111111111111,
+        "width": 0.269140625,
+        "height": 0.022222222222222223
+      },
+      {
+        "name": "for every 50 HP lost.",
+        "confidence": 0.9762836694717407,
+        "x": 0.687109375,
+        "y": 0.7270833333333333,
+        "width": 0.11953125,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "Synthesis Info",
+        "confidence": 0.9901313185691833,
+        "x": 0.694921875,
+        "y": 0.8805555555555555,
+        "width": 0.084765625,
+        "height": 0.03333333333333333
+      }
+    ],
+    "manual_numeric_corrections": {
+      "cost_weight": 4
+    }
+  },
+  {
+    "image": "card_3212.png",
+    "source_filename": "Screenshot (3212).png",
+    "original_image_size": [
+      2560,
+      1440
+    ],
+    "crop_box_pixels": [
+      1756,
+      288,
+      2473,
+      1346
+    ],
+    "expected": {
+      "name": "Training Pistols",
+      "category": "Weapon",
+      "role": "Gold Hunter",
+      "damage": 7,
+      "attack_interval": 4.0,
+      "cost_weight": 2.0,
+      "description_visible": "At the start of the battle, grants 1 stack of Luck\nto the Cubie Warrior."
+    },
+    "actual_ocr": [
+      {
+        "name": "Training",
+        "confidence": 0.9970918893814087,
+        "x": 0.69765625,
+        "y": 0.4326388888888889,
+        "width": 0.073828125,
+        "height": 0.0375
+      },
+      {
+        "name": "Pistols",
+        "confidence": 0.9935649037361145,
+        "x": 0.76484375,
+        "y": 0.43333333333333335,
+        "width": 0.06171875,
+        "height": 0.03611111111111111
+      },
+      {
+        "name": "Gold Hunter",
+        "confidence": 0.9925838112831116,
+        "x": 0.7203125,
+        "y": 0.47430555555555554,
+        "width": 0.071484375,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "DMG",
+        "confidence": 0.9904325008392334,
+        "x": 0.7140625,
+        "y": 0.5493055555555556,
+        "width": 0.033203125,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "Attack Interval",
+        "confidence": 0.9757322072982788,
+        "x": 0.714453125,
+        "y": 0.5993055555555555,
+        "width": 0.088671875,
+        "height": 0.025
+      },
+      {
+        "name": "4s",
+        "confidence": 0.9473398923873901,
+        "x": 0.933203125,
+        "y": 0.6,
+        "width": 0.01875,
+        "height": 0.025
+      },
+      {
+        "name": "COST",
+        "confidence": 0.9894102215766907,
+        "x": 0.71484375,
+        "y": 0.6465277777777778,
+        "width": 0.036328125,
+        "height": 0.02638888888888889
+      },
+      {
+        "name": "2",
+        "confidence": 0.9910396933555603,
+        "x": 0.9390625,
+        "y": 0.6465277777777778,
+        "width": 0.0125,
+        "height": 0.027083333333333334
+      },
+      {
+        "name": "At the start of the battle, grants 1 stack of Luck",
+        "confidence": 0.9851877689361572,
+        "x": 0.6875,
+        "y": 0.6958333333333333,
+        "width": 0.2703125,
+        "height": 0.027777777777777776
+      },
+      {
+        "name": "to the Cubie Warrior.",
+        "confidence": 0.9545057415962219,
+        "x": 0.6875,
+        "y": 0.7277777777777777,
+        "width": 0.123046875,
+        "height": 0.025
+      },
+      {
+        "name": "Synthesis Info",
+        "confidence": 0.9928625226020813,
+        "x": 0.694921875,
+        "y": 0.8805555555555555,
+        "width": 0.084765625,
+        "height": 0.03333333333333333
+      }
+    ],
+    "manual_numeric_corrections": {
+      "damage": 7
+    }
+  },
+  {
+    "image": "card_3218.png",
+    "source_filename": "Screenshot (3218).png",
+    "original_image_size": [
+      2560,
+      1440
+    ],
+    "crop_box_pixels": [
+      1756,
+      288,
+      2473,
+      1346
+    ],
+    "expected": {
+      "name": "Solsworn Ciphers: Xtreme",
+      "category": "Weapon",
+      "role": "Heavy Hitter",
+      "damage": 240.0,
+      "attack_interval": 5.0,
+      "cost_weight": 4,
+      "description_visible": "Unique:\nExcess Crit. Rate is converted into Crit. DMG.\nUnique:\nEach Accessory within the slots maked by\nin the Storvbook arants 4 stacks of"
+    },
+    "actual_ocr": [
+      {
+        "name": "tCollected",
+        "confidence": 0.993506908416748,
+        "x": 0.6859375,
+        "y": 0.21597222222222223,
+        "width": 0.065234375,
+        "height": 0.03263888888888889
+      },
+      {
+        "name": "Solsworn Ciphers: Xtreme",
+        "confidence": 0.9881792068481445,
+        "x": 0.696875,
+        "y": 0.43125,
+        "width": 0.215234375,
+        "height": 0.04097222222222222
+      },
+      {
+        "name": "Heavy Hitter",
+        "confidence": 0.9835394024848938,
+        "x": 0.704296875,
+        "y": 0.4708333333333333,
+        "width": 0.0890625,
+        "height": 0.03611111111111111
+      },
+      {
+        "name": "DMG",
+        "confidence": 0.9898900985717773,
+        "x": 0.713671875,
+        "y": 0.5479166666666667,
+        "width": 0.03359375,
+        "height": 0.029861111111111113
+      },
+      {
+        "name": "240",
+        "confidence": 0.9979349970817566,
+        "x": 0.925,
+        "y": 0.5493055555555556,
+        "width": 0.0265625,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "Attack Interval",
+        "confidence": 0.9809055328369141,
+        "x": 0.71484375,
+        "y": 0.5993055555555555,
+        "width": 0.087890625,
+        "height": 0.025
+      },
+      {
+        "name": "5s",
+        "confidence": 0.9480565190315247,
+        "x": 0.93359375,
+        "y": 0.5993055555555555,
+        "width": 0.01796875,
+        "height": 0.025694444444444443
+      },
+      {
+        "name": "COST",
+        "confidence": 0.993825376033783,
+        "x": 0.715625,
+        "y": 0.6472222222222223,
+        "width": 0.0359375,
+        "height": 0.02638888888888889
+      },
+      {
+        "name": "Unique:",
+        "confidence": 0.9964000582695007,
+        "x": 0.687109375,
+        "y": 0.6958333333333333,
+        "width": 0.0484375,
+        "height": 0.029861111111111113
+      },
+      {
+        "name": "Excess Crit. Rate is converted into Crit. DMG.",
+        "confidence": 0.9804447293281555,
+        "x": 0.6890625,
+        "y": 0.7284722222222222,
+        "width": 0.252734375,
+        "height": 0.022916666666666665
+      },
+      {
+        "name": "Unique:",
+        "confidence": 0.9919830560684204,
+        "x": 0.714453125,
+        "y": 0.7861111111111111,
+        "width": 0.04921875,
+        "height": 0.03333333333333333
+      },
+      {
+        "name": "Each Accessory within the slots maked by",
+        "confidence": 0.9790313839912415,
+        "x": 0.715625,
+        "y": 0.8173611111111111,
+        "width": 0.2421875,
+        "height": 0.030555555555555555
+      },
+      {
+        "name": " in the Storvbook arants 4 stacks of",
+        "confidence": 0.9463098049163818,
+        "x": 0.716796875,
+        "y": 0.8506944444444444,
+        "width": 0.2171875,
+        "height": 0.027083333333333334
+      },
+      {
+        "name": "Synthesis Info",
+        "confidence": 0.9814845323562622,
+        "x": 0.694921875,
+        "y": 0.88125,
+        "width": 0.08515625,
+        "height": 0.03194444444444444
+      }
+    ],
+    "manual_numeric_corrections": {
+      "cost_weight": 4
+    }
+  },
+  {
+    "image": "card_3219.png",
+    "source_filename": "Screenshot (3219).png",
+    "original_image_size": [
+      2560,
+      1440
+    ],
+    "crop_box_pixels": [
+      1756,
+      288,
+      2473,
+      1346
+    ],
+    "expected": {
+      "name": "Aleph-1 from Memories",
+      "category": "Weapon",
+      "role": "Adventurer",
+      "damage": 1.0,
+      "attack_interval": 6.0,
+      "cost_weight": 4,
+      "description_visible": "Deals Effect DMG equal to 60% of the enemy's\ncurrent HP when thisWeapon attacks."
+    },
+    "actual_ocr": [
+      {
+        "name": "tCollected",
+        "confidence": 0.9625158309936523,
+        "x": 0.6859375,
+        "y": 0.21805555555555556,
+        "width": 0.06484375,
+        "height": 0.029861111111111113
+      },
+      {
+        "name": "Aleph-1 from Memories",
+        "confidence": 0.9842074513435364,
+        "x": 0.697265625,
+        "y": 0.43333333333333335,
+        "width": 0.194921875,
+        "height": 0.03680555555555556
+      },
+      {
+        "name": "Adventurer",
+        "confidence": 0.9853448867797852,
+        "x": 0.7171875,
+        "y": 0.475,
+        "width": 0.06953125,
+        "height": 0.027777777777777776
+      },
+      {
+        "name": "DMG",
+        "confidence": 0.9893462061882019,
+        "x": 0.71484375,
+        "y": 0.5506944444444445,
+        "width": 0.03203125,
+        "height": 0.025
+      },
+      {
+        "name": "1",
+        "confidence": 0.9963111281394958,
+        "x": 0.94140625,
+        "y": 0.5548611111111111,
+        "width": 0.006640625,
+        "height": 0.018055555555555554
+      },
+      {
+        "name": "Attack Interval",
+        "confidence": 0.9862829446792603,
+        "x": 0.714453125,
+        "y": 0.5986111111111111,
+        "width": 0.08828125,
+        "height": 0.027083333333333334
+      },
+      {
+        "name": "6s",
+        "confidence": 0.7501499652862549,
+        "x": 0.933984375,
+        "y": 0.6006944444444444,
+        "width": 0.0171875,
+        "height": 0.02361111111111111
+      },
+      {
+        "name": "COST",
+        "confidence": 0.9913942813873291,
+        "x": 0.715234375,
+        "y": 0.6458333333333334,
+        "width": 0.036328125,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "Deals Effect DMG equal to 60% of the enemy's",
+        "confidence": 0.9508070349693298,
+        "x": 0.6875,
+        "y": 0.6965277777777777,
+        "width": 0.267578125,
+        "height": 0.027777777777777776
+      },
+      {
+        "name": "current HP when",
+        "confidence": 0.9824893474578857,
+        "x": 0.688671875,
+        "y": 0.7291666666666666,
+        "width": 0.10234375,
+        "height": 0.022916666666666665
+      },
+      {
+        "name": "thisWeapon attacks.",
+        "confidence": 0.9814639687538147,
+        "x": 0.786328125,
+        "y": 0.7284722222222222,
+        "width": 0.121484375,
+        "height": 0.025
+      },
+      {
+        "name": "Synthesis Info",
+        "confidence": 0.9867315888404846,
+        "x": 0.694921875,
+        "y": 0.88125,
+        "width": 0.084765625,
+        "height": 0.03194444444444444
+      }
+    ],
+    "manual_numeric_corrections": {
+      "cost_weight": 4
+    }
+  },
+  {
+    "image": "card_3180.png",
+    "source_filename": "Screenshot (3180).png",
+    "original_image_size": [
+      2560,
+      1440
+    ],
+    "crop_box_pixels": [
+      1756,
+      288,
+      2473,
+      1346
+    ],
+    "expected": {
+      "name": "Crackling Spectro Frazzle Sheet",
+      "category": "Sheet",
+      "role": "Adventurer",
+      "damage": null,
+      "attack_interval": null,
+      "cost_weight": null,
+      "description_visible": "Inflicts 10 stacks of Spectro Frazzle on the\nenemy every 5s."
+    },
+    "actual_ocr": [
+      {
+        "name": "Crackling",
+        "confidence": 0.9964573979377747,
+        "x": 0.698046875,
+        "y": 0.4326388888888889,
+        "width": 0.0796875,
+        "height": 0.03819444444444445
+      },
+      {
+        "name": "Frazzle Sheet",
+        "confidence": 0.9849852919578552,
+        "x": 0.83828125,
+        "y": 0.4340277777777778,
+        "width": 0.1078125,
+        "height": 0.034722222222222224
+      },
+      {
+        "name": "Spectro",
+        "confidence": 0.9905019998550415,
+        "x": 0.771875,
+        "y": 0.43680555555555556,
+        "width": 0.06953125,
+        "height": 0.03333333333333333
+      },
+      {
+        "name": "Adventurer",
+        "confidence": 0.9948481321334839,
+        "x": 0.71796875,
+        "y": 0.47638888888888886,
+        "width": 0.068359375,
+        "height": 0.025
+      },
+      {
+        "name": "Inflicts",
+        "confidence": 0.9911428689956665,
+        "x": 0.68828125,
+        "y": 0.5430555555555555,
+        "width": 0.041796875,
+        "height": 0.02361111111111111
+      },
+      {
+        "name": "10 stacks",
+        "confidence": 0.9402658939361572,
+        "x": 0.729296875,
+        "y": 0.5430555555555555,
+        "width": 0.0578125,
+        "height": 0.025
+      },
+      {
+        "name": "of Spectro Frazzle",
+        "confidence": 0.9780843257904053,
+        "x": 0.78359375,
+        "y": 0.54375,
+        "width": 0.109765625,
+        "height": 0.025
+      },
+      {
+        "name": "on the",
+        "confidence": 0.9122648239135742,
+        "x": 0.88828125,
+        "y": 0.5458333333333333,
+        "width": 0.041796875,
+        "height": 0.02013888888888889
+      },
+      {
+        "name": "every 5s.",
+        "confidence": 0.9348647594451904,
+        "x": 0.72734375,
+        "y": 0.5743055555555555,
+        "width": 0.056640625,
+        "height": 0.02847222222222222
+      },
+      {
+        "name": "enemy",
+        "confidence": 0.9836559295654297,
+        "x": 0.688671875,
+        "y": 0.5784722222222223,
+        "width": 0.044921875,
+        "height": 0.02361111111111111
+      }
+    ],
+    "manual_numeric_corrections": {}
+  }
+]

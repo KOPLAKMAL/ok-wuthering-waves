@@ -11,8 +11,8 @@ import pytest
 
 from src.task.CubieWarsTask import CubieWarsTask, ShopInterrupted
 from src.task.cubie_wars.model import (
-    ADVENTURE_COUNT, ASTRITE_TOTAL, Item, Screen, Text, classify, next_stage, parse_item,
-    spotlight_instruction,
+    ADVENTURE_COUNT, ASTRITE_TOTAL, CHAR_ROLES, Item, Screen, Text, classify,
+    next_stage, parse_item, selected_build, stage_cube, spotlight_instruction,
 )
 from src.task.cubie_wars.vision import (
     capacity_tag, green_check, number_frame, placement_points, possible_recommendation,
@@ -30,6 +30,98 @@ LIVE_PERSISTENT_ITEM = json.loads((FIXTURES / 'live_persistent_item_ocr.json').r
 LIVE_UNLOCK = json.loads((FIXTURES / 'live_new_warrior_ocr.json').read_text(encoding='utf-8'))
 LIVE_RIGHT_SWORD = json.loads((FIXTURES / 'live_right_sword_ocr.json').read_text(encoding='utf-8'))
 TUTORIAL_CASES = json.loads((FIXTURES / 'tutorial/ocr.json').read_text(encoding='utf-8'))
+BUILD_CASES = json.loads((FIXTURES / 'builds/ocr.json').read_text(encoding='utf-8'))
+
+
+def build_texts(case):
+    return [Text(**{k: v for k, v in t.items() if k != 'confidence'})
+            for t in case['texts'] if t['confidence'] >= .65]
+
+
+@pytest.mark.parametrize('case', BUILD_CASES[:5], ids=lambda c: c['name'])
+def test_supplied_role_guides_read_selected_header_not_left_sidebar(case):
+    texts = build_texts(case)
+    assert classify(texts) == Screen.BUILD_GUIDE
+    assert selected_build(texts) == case['name'].capitalize()
+
+
+@pytest.mark.parametrize('missing', ['character', 'role', 'guide'])
+def test_role_guide_needs_selected_header_and_matching_role(missing):
+    texts = build_texts(BUILD_CASES[0])
+    if missing == 'character':
+        texts = [t for t in texts if t.center[0] < .8]
+    elif missing == 'role':
+        texts = [t for t in texts if not (.36 <= t.center[0] <= .55
+                                         and .23 <= t.center[1] <= .33)]
+        texts.append(Text('Gold Hunter', .4, .27))
+    else:
+        texts = [t for t in texts if not re.fullmatch(r'Role\s*Guide', t.name)]
+    assert selected_build(texts) is None
+
+
+@pytest.mark.parametrize('case', BUILD_CASES[:5], ids=lambda c: c['name'])
+def test_resume_reads_current_character_via_n_and_returns_to_store(case):
+    task = make_task()
+    task._cube = None
+    task._texts = [Text('Recommendation', .025, .79)]
+    texts = build_texts(case)
+    def guide_ready(expected):
+        if expected == {Screen.BUILD_GUIDE}:
+            task._texts = texts
+    task.wait_screen = MagicMock(side_effect=guide_ready)
+    task.click_relative = MagicMock()
+    task.read_active_build()
+    cube = case['name'].capitalize()
+    assert task._cube == cube and task._role == CHAR_ROLES[cube]
+    task.send_key.assert_called_once_with('n')
+    task.click_relative.assert_called_once_with(.943, .06, after_sleep=.6)
+    assert [c.args[0] for c in task.wait_screen.call_args_list] == [
+        {Screen.BUILD_GUIDE}, {Screen.SHOP}]
+
+
+def test_unreadable_resume_build_stops_before_any_purchase():
+    task = make_task()
+    task._cube = None
+    task._texts = [Text('Recommendation', .025, .79)]
+    task.wait_screen = MagicMock()
+    task.click_relative = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='active Cubie name and role'):
+        task.read_active_build()
+    assert task._cube is None
+    task.click_relative.assert_not_called()
+
+
+def test_resume_reopens_manual_guide_via_n_to_get_active_character():
+    task = make_task()
+    task._cube = None
+    task._texts = build_texts(BUILD_CASES[0])  # Manually selected Aemeath.
+    def ready(expected):
+        task._texts = (build_texts(BUILD_CASES[1]) if expected == {Screen.BUILD_GUIDE}
+                       else [Text('Recommendation', .025, .79)])
+    task.wait_screen = MagicMock(side_effect=ready)
+    task.click_relative = MagicMock()
+    task.read_active_build(already_open=True)
+    assert task._cube == 'Hsin' and task._role == 'Traumatizer'
+    task.send_key.assert_called_once_with('n')
+    assert [c.args[0] for c in task.wait_screen.call_args_list] == [
+        {Screen.SHOP}, {Screen.BUILD_GUIDE}, {Screen.SHOP}]
+    assert task.click_relative.call_count == 2
+
+
+@pytest.mark.parametrize('case,count', [(BUILD_CASES[5], 6), (BUILD_CASES[6], 5)],
+                         ids=['supplied_adventure', 'supplied_story'])
+def test_supplied_stage_lists_with_production_ocr(case, count):
+    task = make_task()
+    task.executor.method.width, task.executor.method.height = 1280, 720
+    task.executor.frame = cv2.imread(str(FIXTURES / 'builds' / (case['name']+'.jpg')))
+    task.observe = MagicMock(return_value=Screen.STAGES)
+    task.ocr = MagicMock(return_value=[SimpleNamespace(
+        name=t['name'], x=t['x']*1280, y=t['y']*720,
+        width=t['width']*1280, height=t['height']*720)
+        for t in case['production_stage_list'] if t['confidence'] >= .65])
+    checks, rows = task.stage_checks(count)
+    assert set(rows) == set(range(1, count+1)) and all(checks.values())
 
 
 def tutorial_case(name):
@@ -438,6 +530,9 @@ def test_drop_requires_green_preview_and_rejects_collision():
 
 def make_task():
     task = CubieWarsTask(MagicMock(), MagicMock())
+    # Existing shop/action fixtures start with a verified Rover build.
+    # Resume identity tests explicitly clear it to exercise N recovery.
+    task._cube = 'Rover'
     task.config = dict(task.default_config)
     task.executor.method.width = 1280
     task.executor.method.height = 720
@@ -455,6 +550,75 @@ def make_task():
     task.pick_up = MagicMock(side_effect=picked_up)
     task.drag_active = MagicMock(return_value=True)
     return task
+
+
+@pytest.mark.parametrize('mode,cubes', [
+    ('Story', ['Rover', 'Aemeath', 'Hsin', 'Sigrika', 'Lynae']),
+    ('Adventure', ['Rover', 'Sigrika', 'Hsin', 'Lynae', 'Aemeath', 'Lynae']),
+])
+def test_player_character_mapping_for_every_stage(mode, cubes):
+    assert [stage_cube(mode, stage) for stage in range(1, len(cubes)+1)] == cubes
+
+
+@pytest.mark.parametrize('mode,stage', [('Story', 0), ('Story', 6),
+                                      ('Adventure', 7), ('Other', 1),
+                                      ('Story', True), ('Story', None)])
+def test_invalid_stage_cannot_choose_a_character(mode, stage):
+    with pytest.raises(ValueError):
+        stage_cube(mode, stage)
+
+
+@pytest.mark.parametrize('role', list(CHAR_ROLES.values()))
+def test_rover_accepts_all_weapon_roles_and_specialists_reject_other_weapons(role):
+    sword = Item('Weapon', role, False, 3, 6, 2, '', 'Weapon')
+    assert sword.score('Adventurer', 3, 4, 2) == pytest.approx(2.7)
+    for active in list(CHAR_ROLES.values())[1:]:
+        assert (sword.purchase_rank(active, 3, 4, 2) is not None) == (
+            role in {active, 'Adventurer'})
+    assert sword.purchase_rank('Adventurer', 2, 4, 2) is None
+
+
+@pytest.mark.parametrize('stage', range(1, 7))
+def test_adventure_selects_stage_character_in_original_cube_order(stage):
+    task = make_task()
+    cube = stage_cube('Adventure', stage)
+    task.observe = MagicMock(side_effect=[Screen.CUBE, Screen.STAGE_RESULT])
+    task._texts = [Text('Rover', .75, .12), Text('Go', .8, .9)]
+    task.wait_screen = MagicMock(side_effect=lambda _: setattr(task, '_texts', [
+        Text(cube, .75, .12), Text('Go', .8, .9), Text('Back', .7, .9)]))
+    task.click_relative = MagicMock()
+    task.click_text = MagicMock()
+    task.play_stage('Adventure', stage)
+    assert task._cube == cube and task._role == CHAR_ROLES[cube]
+    task.click_relative.assert_called_once_with(
+        task.CUBE_POSITIONS[('Rover', 'Aemeath', 'Hsin', 'Sigrika', 'Lynae').index(cube)],
+        .914, after_sleep=.6)
+
+
+def test_story_character_mismatch_stops_before_entering_stage():
+    task = make_task()
+    task.observe = MagicMock(return_value=Screen.CUBE)
+    task._texts = [Text('Rover', .75, .12), Text('Go', .8, .9)]
+    task.click_text = MagicMock()
+    task.screenshot = MagicMock()
+    with pytest.raises(RuntimeError, match='selected Cubie: Aemeath'):
+        task.play_stage('Story', 2)
+    task.click_text.assert_not_called()
+
+
+def test_complete_mode_passes_verified_stage_number_to_character_selection():
+    task = make_task()
+    pending = {n: n != 2 for n in range(1, 7)}
+    done = {n: True for n in range(1, 7)}
+    rows = {n: Text(f'Stage {n}', .1, .2+n*.1) for n in range(1, 7)}
+    task.stage_checks = MagicMock(side_effect=[(pending, rows), (done, rows), (done, rows)])
+    task.wait_screen = MagicMock()
+    task.click_text = MagicMock()
+    task.click_relative = MagicMock()
+    task.play_stage = MagicMock()
+    task.close_page = MagicMock()
+    task.complete_mode('Adventure')
+    task.play_stage.assert_called_once_with('Adventure', 2)
 
 
 @pytest.mark.parametrize('case', json.loads((FIXTURES / 'stage_labels_ocr.json').read_text()),
